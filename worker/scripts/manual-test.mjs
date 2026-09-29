@@ -91,6 +91,10 @@ try {
       JSON.stringify(servers).includes('"turns:');
     check('relay (TURN) is configured', true, `${servers.length} ice server group(s)`);
     check('relay includes a TURN url, not just STUN', hasTurn);
+  } else if (turn.data.reason) {
+    // The Worker refused a half-configured relay. Surface its explanation
+    // instead of the generic note: it names the secret that needs fixing.
+    check('relay (TURN) is configured', false, turn.data.reason);
   } else {
     console.log('NOTE  relay (TURN) is not configured — fine on an open network,');
     console.log('      but screen sharing will fail on a network that blocks peer-to-peer.');

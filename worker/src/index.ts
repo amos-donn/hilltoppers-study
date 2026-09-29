@@ -118,7 +118,7 @@ const METERED_CREDENTIALS = 'https://a.metered.live/api/v1/turn/credentials';
 // public PeerJS cloud, though screen sharing then only works on open networks.
 async function turnCredentials(env: Env): Promise<Response> {
   const fixed = fixedIceServers(env);
-  if (fixed.length > 0) return json({ configured: true, iceServers: fixed }, 200);
+  if (fixed.length > 0) return relayResponse(fixed, 'TURN_URLS');
 
   if (env.TURN_API_KEY) {
     const url = `${env.TURN_API_BASE || METERED_CREDENTIALS}?apiKey=${encodeURIComponent(env.TURN_API_KEY)}`;
@@ -128,7 +128,7 @@ async function turnCredentials(env: Env): Promise<Response> {
     // Metered returns the iceServers array directly; older shapes wrap it.
     const list = Array.isArray(data) ? data : (data as { iceServers?: unknown })?.iceServers;
     const iceServers = Array.isArray(list) ? list : [];
-    return json({ configured: iceServers.length > 0, iceServers }, 200);
+    return relayResponse(iceServers, 'TURN_API_KEY');
   }
 
   const keyId = env.TURN_KEY_ID;
@@ -147,7 +147,37 @@ async function turnCredentials(env: Env): Promise<Response> {
   if (!response.ok) return json({ error: 'Could not get relay credentials.' }, 502);
   const data = (await response.json()) as { iceServers?: unknown };
   const iceServers = Array.isArray(data?.iceServers) ? data.iceServers : [];
-  return json({ configured: iceServers.length > 0, iceServers }, 200);
+  return relayResponse(iceServers, 'TURN_KEY_ID');
+}
+
+// A provider that returns only STUN cannot relay, so reporting configured:true
+// would be a lie: the app would show itself as ready and still fail on a school
+// network. A relay counts only when it has a turn:/turns: url *and* something to
+// authenticate with.
+function relayProblem(iceServers: unknown[]): string | null {
+  let sawTurn = false;
+  let sawCredentials = false;
+  for (const server of iceServers) {
+    if (!server || typeof server !== 'object') continue;
+    const value = server as { urls?: unknown; username?: unknown; credential?: unknown };
+    const urls = Array.isArray(value.urls) ? value.urls : [value.urls];
+    if (urls.some((url) => typeof url === 'string' && /^turns?:/i.test(url.trim()))) {
+      sawTurn = true;
+      if (value.username || value.credential) return null;
+    }
+    if (value.username || value.credential) sawCredentials = true;
+  }
+  if (!sawTurn) return 'no turn: url to relay through. Use the turn: entries from the provider, not the stun: one.';
+  if (!sawCredentials) return 'the turn: url has no username or credential, so the relay would refuse it.';
+  return 'no usable entry.';
+}
+
+function relayResponse(iceServers: unknown[], source: string): Response {
+  const problem = relayProblem(iceServers);
+  if (!problem) return json({ configured: true, iceServers }, 200);
+  // Handing back a STUN-only list would quietly disable the app's fallback, so
+  // return nothing and say why. The reason is for whoever is setting secrets up.
+  return json({ configured: false, iceServers: [], reason: `${source} is set but ${problem}` }, 200);
 }
 
 // A relay the operator configured by hand. URLs are comma-separated so a

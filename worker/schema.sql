@@ -1,6 +1,6 @@
 -- StudyStream D1 schema.
--- Apply with:
---   npx wrangler d1 execute studystream-sessions --config wrangler.toml --remote --file=schema.sql
+-- Run this from the worker/ folder; the config lives one level up.
+--   npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
 -- All statements are idempotent, so re-applying after an update is safe.
 
 -- One logical account. Students share `handle` to find each other; the long

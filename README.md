@@ -12,6 +12,7 @@ extension itself.
 
 ![The home view](docs/home.png)
 ![The session view](docs/session.png)
+![Fill tab, with the floating chat](docs/fill-mode.png)
 
 ## How a session works
 
@@ -45,6 +46,21 @@ card. It follows the Topping conventions in the Hilltoppers repo:
   `allow-modals`, `window.confirm`/`alert` are blocked, so confirmations are
   in-page overlays. `localStorage` is also blocked in a sandboxed cross-origin
   frame, so every access is guarded and the app still runs.
+
+## Fill tab
+
+Under the picture there is a **Fill tab** button. It is not the browser's
+Fullscreen API: the picture is stretched to the height of the tab and the page
+scrolls, so it also works inside the Topping iframe, where a cross-origin frame
+is not allowed to go fullscreen. While it is on, the chat becomes a small panel
+floating over the picture, which the viewer can drag out of the way or collapse,
+and the rest of the page is hidden. The person sharing sees **Sharing tab** in
+place of their own picture, rather than a mirror of the window they are already
+looking at.
+
+Fill mode sets a viewport height on the picture only, never on
+`[data-topping-content]`, so the height reported to the extension still shrinks
+back when the mode is left.
 
 ## Screen sharing needs one change in Hilltoppers
 

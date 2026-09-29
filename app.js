@@ -30,7 +30,8 @@
     token: null, handle: null, peerId: null, session: null,
     peer: null, conn: null, pendingHandle: null,
     localStream: null, remoteStream: null, call: null, pollTimer: null,
-    consentGiven: false, stoppingShare: false
+    consentGiven: false, stoppingShare: false,
+    filling: false
   };
 
   // localStorage throws in a sandboxed frame; never let that break the app.
@@ -241,20 +242,62 @@
     renderVideo();
   }
 
-  // Show the classmate's screen when they share, otherwise your own preview so
-  // you can confirm you picked the right window.
+  // Show the classmate's screen. Your own picture is never mirrored back to you:
+  // you already have the window you are sharing, so while you share and are not
+  // watching anything, the box says so instead.
   function renderVideo() {
-    const stream = state.remoteStream || state.localStream;
+    const sharing = Boolean(state.localStream);
+    const stream = state.remoteStream;
+    const showMessage = sharing && !stream;
     const video = $('video');
-    if (video.srcObject !== stream) video.srcObject = stream || null;
-    $('video-wrap').hidden = !stream;
-    // Only offer fullscreen where the embed actually allows it.
-    $('video-full').hidden = !stream || !document.fullscreenEnabled;
-    if (!stream) return;
-    $('video-label').textContent = state.remoteStream ? "Classmate's screen" : 'Your screen';
-    // A paused element paints black: the stream is there, but nothing renders it.
-    // autoplay covers the first stream; this covers swapping between two.
-    video.play().catch(() => { /* autoplay may be blocked; the frame stays */ });
+    if (video.srcObject !== stream) video.srcObject = stream;
+    $('video-wrap').hidden = !sharing && !stream;
+    $('video-message').hidden = !showMessage;
+    $('video-label').hidden = !stream;
+    // Fill tab stretches the picture over the page rather than using the
+    // Fullscreen API, so it works in the embed too.
+    $('video-full').hidden = !sharing && !stream;
+    if (stream) {
+      $('video-label').textContent = "Classmate's screen";
+      // A paused element paints black: the stream is there, but nothing renders
+      // it. autoplay covers the first stream; this covers swapping between two.
+      video.play().catch(() => { /* autoplay may be blocked; the frame stays */ });
+    }
+    applyFillMode();
+  }
+
+  // Enter or leave the in-page fill, and keep the floating chat in step.
+  function applyFillMode() {
+    const filling = state.filling && Boolean(state.remoteStream || state.localStream);
+    if (!filling) state.filling = false;
+    $('app').classList.toggle('filling', filling);
+    $('chat-float').hidden = !filling;
+    $('video-full').textContent = filling ? 'Exit' : 'Fill tab';
+    // Start each fill anchored to the corner; a drag within a fill is kept.
+    if (!filling) {
+      const panel = $('chat-float');
+      panel.style.left = '';
+      panel.style.top = '';
+      panel.style.right = '';
+    }
+    mountChat(filling);
+    if (filling) $('video').play().catch(() => { /* autoplay may be blocked; the frame stays */ });
+  }
+
+  // While filling, the chat is a floating panel, so the conversation and the
+  // composer move into it and back out again. Same nodes: one conversation.
+  function mountChat(filling) {
+    const session = $('view-session');
+    const messages = $('messages');
+    const form = $('chat-form');
+    if (filling) {
+      $('chat-float-body').append(messages, form);
+      return;
+    }
+    // Back above the floating panel, which sits where they originally were.
+    const anchor = $('chat-float');
+    session.insertBefore(messages, anchor);
+    session.insertBefore(form, anchor);
   }
 
   // -- Screen sharing ----------------------------------------------------
@@ -381,6 +424,8 @@
     state.pendingHandle = null;
     stopPolling();
     stopShare();
+    state.filling = false;
+    applyFillMode();
     $('end').hidden = true;
     $('share').hidden = true;
     $('accept-slot').replaceChildren();
@@ -461,22 +506,54 @@
   $('consent-cancel').onclick = () => { $('consent').hidden = true; };
   $('consent-ok').onclick = () => { state.consentGiven = true; $('consent').hidden = true; startShare(); };
   $('stop-share').onclick = stopShare;
-  $('video-full').onclick = async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await $('video-wrap').requestFullscreen();
-    } catch {
-      // A sandboxed embed can refuse fullscreen; the browser shows nothing, so
-      // say so instead of leaving the button looking broken.
-      $('share-status').textContent = 'Fullscreen is blocked here. Ask to have it enabled.';
-    }
+  // Fill tab, not the Fullscreen API: the picture is stretched over the page and
+  // the chat floats above it.
+  $('video-full').onclick = () => {
+    state.filling = !state.filling;
+    applyFillMode();
   };
-  // Keep the label in step with the browser's fullscreen state, which a student
-  // can also leave with Esc.
-  document.addEventListener('fullscreenchange', () => {
-    $('video-full').textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+  // Drag the floating chat so it does not sit over the part of the picture the
+  // viewer needs. Pointer events cover mouse and touch.
+  let chatDrag = null;
+  let chatDragged = false;
+  $('chat-float-toggle').onclick = () => {
+    // A drag ends with a click; do not let it also collapse the panel.
+    if (chatDragged) { chatDragged = false; return; }
+    const body = $('chat-float-body');
+    body.hidden = !body.hidden;
+    $('chat-float-toggle').setAttribute('aria-expanded', String(!body.hidden));
+    $('chat-float-chev').textContent = body.hidden ? '▸' : '▾';
+  };
+  const chatBar = $('chat-float-toggle');
+  chatBar.addEventListener('pointerdown', (event) => {
+    const panel = $('chat-float').getBoundingClientRect();
+    chatDrag = { offX: event.clientX - panel.left, offY: event.clientY - panel.top, startX: event.clientX, startY: event.clientY };
+    chatDragged = false;
+    chatBar.setPointerCapture(event.pointerId);
   });
+  chatBar.addEventListener('pointermove', (event) => {
+    if (!chatDrag) return;
+    if (Math.hypot(event.clientX - chatDrag.startX, event.clientY - chatDrag.startY) > 4) chatDragged = true;
+    if (!chatDragged) return;
+    const panel = $('chat-float');
+    const box = $('view-session').getBoundingClientRect();
+    const left = Math.min(Math.max(event.clientX - chatDrag.offX - box.left, 0), Math.max(box.width - panel.offsetWidth, 0));
+    const top = Math.min(Math.max(event.clientY - chatDrag.offY - box.top, 0), Math.max(box.height - panel.offsetHeight, 0));
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+    panel.style.right = 'auto';
+  });
+  chatBar.addEventListener('pointerup', () => { chatDrag = null; });
   $('warning-ok').onclick = () => { $('warning').hidden = true; writeStore(WARNED_KEY, '1'); };
+
+  // Leaving the page drops a fill that would otherwise be stuck, since the
+  // student cannot press Exit from a tab they have navigated away from.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state.filling) {
+      state.filling = false;
+      applyFillMode();
+    }
+  });
 
   // -- Boot --------------------------------------------------------------
   async function boot() {

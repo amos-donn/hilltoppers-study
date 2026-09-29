@@ -69,6 +69,36 @@ permission. The fix is one attribute in
 Until then the app is fully usable for chat and the Share button explains that
 screen sharing is blocked, rather than failing silently.
 
+## Relay (TURN), for school networks
+
+Even once the iframe allows capture, two browsers still have to find a network
+path to each other. On many school networks they cannot: the network blocks the
+direct peer-to-peer route. Chat usually still works because it is small, but a
+screen share is a continuous stream and cannot, so it looks like "sharing is
+broken on school wifi".
+
+The fix is a relay, or TURN, server. The Worker hands out short-lived Cloudflare
+TURN credentials from `/api/turn`, and the app adds them to the connection
+automatically. The TURN key stays on the server; students only ever get a
+credential that expires in a few hours.
+
+To turn it on, in the Cloudflare dashboard:
+
+1. Go to **Realtime → TURN**, create a **TURN key**, and copy its **Key ID**.
+2. Create an **API token** with the *Calls Write* (and *Realtime*) permission.
+3. Add both to the Worker as secrets: **Settings → Variables and Secrets →
+   Add → Secret**, named `TURN_KEY_ID` and `TURN_API_TOKEN`.
+
+(If you have a terminal, the same two are set with
+`npx wrangler secret put TURN_KEY_ID --config ../wrangler.toml` and the same for
+`TURN_API_TOKEN`, from inside `worker/`.)
+
+While those are unset, `/api/turn` answers `{"configured":false}` and the app
+quietly falls back to the public PeerJS cloud, which is fine on an open network.
+Set both and reload the Topping to switch it on. To check from a browser, open
+`https://hilltoppers-study.amos-donn.workers.dev/api/turn` — with the secrets in
+place you should see a list of `iceServers` instead of an empty one.
+
 ## Deploy
 
 These are the steps that match the current Cloudflare setup: Worker

@@ -78,6 +78,19 @@ try {
   check('A ends the room', ended.status === 200);
   const after = await call('/session', { token: b.token });
   check('B no longer has an active room', after.data.state === 'none');
+
+  // Relay credentials are optional; report which mode is active rather than
+  // failing, so this test is useful before and after TURN is switched on.
+  const turn = await call('/turn');
+  const servers = turn.data.iceServers || [];
+  if (turn.status !== 200) {
+    check('relay credentials endpoint responds', false, `status ${turn.status}`);
+  } else if (servers.length) {
+    check('relay (TURN) is configured', true, `${servers.length} ice server group(s)`);
+  } else {
+    console.log('NOTE  relay (TURN) is not configured — fine on an open network,');
+    console.log('      but screen sharing will fail on a network that blocks peer-to-peer.');
+  }
 } catch (error) {
   check('test run completed', false, error.message);
 }

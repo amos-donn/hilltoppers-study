@@ -105,10 +105,23 @@
   }
 
   // -- PeerJS ------------------------------------------------------------
-  function ensurePeer() {
-    if (state.peer && !state.peer.destroyed) return Promise.resolve(state.peer);
+  // Merge relay servers from the Worker with anything set in config.js, so a
+  // static TURN server can be used before the Worker one is configured.
+  async function peerOptions() {
+    const base = { ...PEER_OPTIONS };
+    if (base.config?.iceServers?.length) return base;
+    try {
+      const relay = await api('/turn');
+      if (relay?.iceServers?.length) base.config = { ...(base.config || {}), iceServers: relay.iceServers };
+    } catch { /* no relay: fall back to the public cloud */ }
+    return base;
+  }
+
+  async function ensurePeer() {
+    if (state.peer && !state.peer.destroyed) return state.peer;
+    const options = await peerOptions();
     return new Promise((resolve, reject) => {
-      const peer = new Peer(state.peerId, PEER_OPTIONS);
+      const peer = new Peer(state.peerId, options);
       peer.on('open', () => { state.peer = peer; resolve(peer); });
       peer.on('error', (error) => {
         if (!state.peer) reject(error);

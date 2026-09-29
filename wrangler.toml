@@ -33,3 +33,8 @@ database_id = "7cfc650d-c260-4857-b3cc-8f23b36223cb"
 # with `npx wrangler secret put SESSION_HMAC_KEY`. It signs account tokens; the
 # Worker refuses to serve /api with a missing or short key instead of falling
 # back to a guessable default.
+#
+# Set TURN_KEY_ID and TURN_API_TOKEN the same way to hand out Cloudflare TURN
+# relay credentials, which is what lets screen sharing work on a network that
+# blocks peer-to-peer. See "Relay (TURN)" in the README. While they are unset,
+# /api/turn reports configured:false and clients use the public PeerJS cloud.

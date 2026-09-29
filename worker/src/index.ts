@@ -12,6 +12,15 @@ export interface Env {
   // Comma-separated origins allowed to call /api. Defaults to this Worker's
   // own origin. The Topping is hosted elsewhere, so it is listed here.
   ALLOWED_ORIGINS?: string;
+  // Cloudflare Calls TURN. When both are set the Worker hands out short-lived
+  // relay credentials, which is what lets two students behind a school network
+  // reach each other. With neither set, clients fall back to the public PeerJS
+  // cloud and screen sharing only works on open networks.
+  TURN_KEY_ID?: string;
+  TURN_API_TOKEN?: string;
+  // Override for the credential endpoint. Only for tests or a self-hosted
+  // issuer; leave unset to use Cloudflare.
+  TURN_API_BASE?: string;
 }
 
 const SESSION_TTL = 2 * 60 * 60;
@@ -83,6 +92,32 @@ function ensureSchema(db: D1Database): Promise<void> {
       });
   }
   return schemaReady;
+}
+
+const TURN_TTL = 4 * 60 * 60;
+
+// Short-lived relay credentials from Cloudflare Calls TURN. The browser needs
+// these to reach a classmate when the school network blocks peer-to-peer; the
+// TURN key stays here and is never sent to a student.
+async function turnCredentials(env: Env): Promise<Response> {
+  const keyId = env.TURN_KEY_ID;
+  const token = env.TURN_API_TOKEN;
+  // Not an error: the site keeps working over the public PeerJS cloud.
+  if (!keyId || !token) return json({ configured: false, iceServers: [] }, 200);
+
+  const base = env.TURN_API_BASE || 'https://rtc.live.cloudflare.com/v1/turn/keys';
+  const response = await fetch(
+    `${base}/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl: TURN_TTL })
+    }
+  );
+  if (!response.ok) return json({ error: 'Could not get relay credentials.' }, 502);
+  const data = (await response.json()) as { iceServers?: unknown };
+  const iceServers = Array.isArray(data?.iceServers) ? data.iceServers : [];
+  return json({ configured: iceServers.length > 0, iceServers }, 200);
 }
 
 interface SessionRow {
@@ -224,6 +259,10 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
   await ensureSchema(db);
 
   if (path === '/health') return json({ ok: true, configured: true, service: 'studystream' }, 200);
+
+  // Relay credentials for the WebRTC handshake. No account needed: this is
+  // called before sign-in so a slow network is fixed before a room opens.
+  if (path === '/turn') return turnCredentials(env);
 
   // Create an account, or sign back into one from a stored secret.
   if (path === '/register' && request.method === 'POST') {

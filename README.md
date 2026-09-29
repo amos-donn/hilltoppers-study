@@ -71,16 +71,24 @@ screen sharing is blocked, rather than failing silently.
 
 ## Deploy
 
+These are the steps that match the current Cloudflare setup: Worker
+`hilltoppers-study`, D1 database `studystream-sessions`
+(`7cfc650d-c260-4857-b3cc-8f23b36223cb`), binding `DB_BINDING`, and the site at
+`https://hilltoppers-study.amos-donn.workers.dev`.
+
 ### 1. Worker
 
 ```sh
 cd worker
 npm ci
-npx wrangler d1 create studystream-sessions    # copy the id into wrangler.toml
 npx wrangler d1 execute studystream-sessions --config wrangler.toml --remote --file=schema.sql
 npx wrangler secret put SESSION_HMAC_KEY         # any 32+ character random string
 npm run deploy
 ```
+
+If you changed the binding name or database id, keep `wrangler.toml` and the
+dashboard in sync. `DB_BINDING` in `wrangler.toml` must match the variable name
+the dashboard shows on the Worker's settings page.
 
 `ALLOWED_ORIGINS` in `wrangler.toml` must list the site's origin
 (`https://amos-donn.github.io`) so the browser is allowed to call `/api`.

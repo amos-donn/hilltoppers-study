@@ -30,7 +30,7 @@
     token: null, handle: null, peerId: null, session: null,
     peer: null, conn: null, pendingHandle: null,
     localStream: null, remoteStream: null, call: null, pollTimer: null,
-    consentGiven: false
+    consentGiven: false, stoppingShare: false
   };
 
   // localStorage throws in a sandboxed frame; never let that break the app.
@@ -147,7 +147,7 @@
       });
       peer.on('disconnected', () => { try { peer.reconnect(); } catch { /* ignore */ } });
       peer.on('connection', wireConn);
-      peer.on('call', (call) => { call.answer(); wireCall(call); });
+      peer.on('call', (call) => { call.answer(); wireCall(call, false); });
     });
   }
 
@@ -182,11 +182,33 @@
     conn.on('error', () => { system('The chat connection failed.'); });
   }
 
-  function wireCall(call) {
+  // outgoing is true for the classmate sharing, false for the one watching. The
+  // two need different wording, and only the watcher should log to the chat.
+  function wireCall(call, outgoing) {
     state.call = call;
-    call.on('stream', (stream) => { state.remoteStream = stream; renderVideo(); });
-    call.on('close', clearRemote);
-    call.on('error', clearRemote);
+    let sawStream = false;
+    call.on('stream', (stream) => { sawStream = true; state.remoteStream = stream; renderVideo(); });
+    call.on('close', () => {
+      // A stop we asked for is not a failure, so stay quiet about it.
+      const stopped = state.stoppingShare;
+      clearRemote();
+      if (stopped) return;
+      if (outgoing) $('share-status').textContent = 'The screen connection could not be made.';
+      else if (sawStream) system('Your classmate stopped sharing.');
+    });
+    call.on('error', () => {
+      clearRemote();
+      if (outgoing) $('share-status').textContent = 'The screen connection could not be made.';
+      else system('The screen connection could not be made.');
+    });
+    // A call that never opens and never errors would otherwise hang silently.
+    if (outgoing) {
+      setTimeout(() => {
+        if (state.call === call && !sawStream) {
+          $('share-status').textContent = 'The screen connection could not be made.';
+        }
+      }, 20000);
+    }
   }
 
   function clearRemote() {
@@ -199,9 +221,14 @@
   // you can confirm you picked the right window.
   function renderVideo() {
     const stream = state.remoteStream || state.localStream;
-    $('video').srcObject = stream || null;
+    const video = $('video');
+    if (video.srcObject !== stream) video.srcObject = stream || null;
     $('video-wrap').hidden = !stream;
-    if (stream) $('video-label').textContent = state.remoteStream ? "Classmate's screen" : 'Your screen';
+    if (!stream) return;
+    $('video-label').textContent = state.remoteStream ? "Classmate's screen" : 'Your screen';
+    // A paused element paints black: the stream is there, but nothing renders it.
+    // autoplay covers the first stream; this covers swapping between two.
+    video.play().catch(() => { /* autoplay may be blocked; the frame stays */ });
   }
 
   // -- Screen sharing ----------------------------------------------------
@@ -220,7 +247,10 @@
       renderVideo();
       // Send the screen to the classmate only if we are already connected.
       if (state.conn?.open && state.peer && state.session?.peer) {
-        wireCall(state.peer.call(state.session.peer, stream, { metadata: { kind: 'screen' } }));
+        state.stoppingShare = false;
+        wireCall(state.peer.call(state.session.peer, stream, { metadata: { kind: 'screen' } }), true);
+      } else {
+        $('share-status').textContent = 'Not connected yet. The screen could not be sent.';
       }
     } catch (error) {
       $('share-status').textContent = error?.name === 'NotAllowedError'
@@ -230,6 +260,9 @@
   }
 
   function stopShare() {
+    // Mark it before closing, so wireCall knows the close was intended and stays
+    // quiet instead of reporting a failure.
+    state.stoppingShare = true;
     for (const track of state.localStream?.getTracks() || []) track.stop();
     state.localStream = null;
     try { state.call?.close(); } catch { /* already closed */ }

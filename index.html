@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>StudyStream</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main data-topping-content class="app">
+
+    <header class="statusbar">
+      <span class="dot" id="status-dot" aria-hidden="true"></span>
+      <span class="status" id="status-text" role="status">Starting…</span>
+    </header>
+
+    <!-- Could not reach the StudyStream server. -->
+    <section class="view" id="view-offline" hidden>
+      <h1 class="h1">StudyStream is offline</h1>
+      <p class="muted">The study server could not be reached. Check the connection and reload the Topping.</p>
+      <button class="primary" id="retry">Try again</button>
+    </section>
+
+    <!-- Home: your code, or invite a classmate by theirs. -->
+    <section class="view" id="view-home" hidden>
+      <p class="label">Your code</p>
+      <div class="code-row">
+        <strong class="code" id="my-code" aria-live="polite">······</strong>
+        <button class="ghost" id="copy-code" type="button">Copy</button>
+        <button class="ghost" id="share-code" type="button">Share</button>
+      </div>
+      <p class="muted small">Give this code to a classmate, or enter theirs below.</p>
+
+      <form id="join-form" class="join" autocomplete="off">
+        <label class="sr-only" for="join-code">Classmate's code</label>
+        <input id="join-code" class="code-input" inputmode="text" maxlength="6"
+               placeholder="Their code" aria-label="Classmate's code">
+        <button class="primary" id="join-button" type="submit">Study together</button>
+      </form>
+
+      <p class="error" id="home-error" role="alert" hidden></p>
+    </section>
+
+    <!-- Waiting: invite sent, or waiting for a classmate to accept ours. -->
+    <section class="view" id="view-waiting" hidden>
+      <h1 class="h1" id="waiting-heading">Waiting for a classmate</h1>
+      <strong class="code big" id="waiting-code" aria-live="polite"></strong>
+      <p class="muted small" id="waiting-note"></p>
+      <div class="row end" id="accept-slot"></div>
+      <button class="ghost" id="cancel-wait" type="button">Cancel</button>
+    </section>
+
+    <!-- Session: screen preview, chat, and share controls. -->
+    <section class="view" id="view-session" hidden>
+      <div class="video-wrap" id="video-wrap" hidden>
+        <video id="video" playsinline muted></video>
+        <span class="video-label" id="video-label"></span>
+      </div>
+
+      <div class="controls">
+        <button class="ghost" id="share" type="button">Share screen</button>
+        <button class="ghost" id="stop-share" type="button" hidden>Stop</button>
+        <span class="muted small" id="share-status" role="status"></span>
+      </div>
+
+      <div id="messages" class="messages" role="log" aria-label="Chat" aria-live="polite"></div>
+
+      <form id="chat-form" class="composer">
+        <label class="sr-only" for="chat-input">Message</label>
+        <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Message…">
+        <button class="primary" id="send" type="submit">Send</button>
+      </form>
+
+      <button class="ghost" id="end" type="button">Leave session</button>
+    </section>
+
+    <!-- Consent before the first screen share. Not a browser dialog: the
+         extension sandbox blocks window.confirm. -->
+    <div class="overlay" id="consent" hidden>
+      <div class="card" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+        <h2 class="h1" id="consent-title">Share your screen?</h2>
+        <p class="muted small">Your classmate will see the screen you pick until you press Stop. Chat stays text.</p>
+        <label class="consent-check">
+          <input type="checkbox" id="consent-check">
+          <span>I understand my classmate can see my screen.</span>
+        </label>
+        <div class="row end">
+          <button class="ghost" id="consent-cancel" type="button">Cancel</button>
+          <button class="primary" id="consent-ok" type="button" disabled>Share</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- One-time first-run notice. -->
+    <div class="overlay" id="warning" hidden>
+      <div class="card" role="dialog" aria-modal="true" aria-labelledby="warning-title">
+        <h2 class="h1" id="warning-title">How StudyStream works</h2>
+        <p class="muted small">Chat and screen sharing go straight between you and your classmate. The server only matches your codes and never sees your messages or your screen.</p>
+        <p class="muted small">Screen sharing needs permission in the Hilltoppers popup. If the Share button does nothing, ask to have it enabled.</p>
+        <div class="row end">
+          <button class="primary" id="warning-ok" type="button">Got it</button>
+        </div>
+      </div>
+    </div>
+
+    <template id="message-template">
+      <div class="msg">
+        <span class="who"></span>
+        <span class="text"></span>
+      </div>
+    </template>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="app.js" defer></script>
+  <script src="resize.js" defer></script>
+</body>
+</html>

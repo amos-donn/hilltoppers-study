@@ -1,0 +1,32 @@
+name = "studystream"
+main = "src/index.ts"
+compatibility_date = "2026-09-16"
+workers_dev = true
+
+# The Topping website is served by GitHub Pages. This Worker only answers
+# /api/*, so it has no assets binding.
+
+# Rate-limit unauthenticated and room-code endpoints.
+[[ratelimits]]
+name = "JOIN_LIMITER"
+namespace_id = "3403"
+simple = { limit = 30, period = 60 }
+
+# Stale accounts, sessions and signaling rows are swept hourly so a public
+# deploy does not accumulate old identities.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+# Origins allowed to call /api. The Topping is hosted on GitHub Pages; the
+# Worker's own origin is always allowed.
+ALLOWED_ORIGINS = "https://amos-donn.github.io"
+
+[[d1_databases]]
+binding = "SESSIONS_DB"
+database_name = "studystream-sessions"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# Set SESSION_HMAC_KEY with `npx wrangler secret put SESSION_HMAC_KEY`.
+# It signs account tokens; the Worker refuses to serve /api with a missing or
+# short key instead of falling back to a guessable default.

@@ -100,8 +100,8 @@ The Worker checks these in order and uses the first that is configured:
 
 | Secret | Use it for |
 |---|---|
-| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | A fixed relay server: self-hosted coturn, or any provider that gives you a long-lived username and password. `TURN_URLS` is comma-separated. |
-| `TURN_API_KEY` | Metered, as above. |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | A fixed relay server: self-hosted coturn, or the "Show ICE Servers Array" values from Metered's TURN dashboard. `TURN_URLS` is comma-separated and must contain the `turn:` entries — a `stun:` url cannot relay and is refused. |
+| `TURN_API_KEY` | Metered's credential endpoint, as above. |
 | `TURN_KEY_ID`, `TURN_API_TOKEN` | Cloudflare Calls TURN (**Realtime → TURN**). Requires billing details. |
 
 While none are set, `/api/turn` answers `{"configured":false}` and the app
@@ -109,6 +109,12 @@ quietly falls back to the public PeerJS cloud, which is fine on an open network.
 Configure one and reload the Topping to switch it on. To check from a browser,
 open `https://hilltoppers-study.amos-donn.workers.dev/api/turn` — you should see
 a list of `iceServers` containing a `turn:` entry, not an empty one.
+
+A half-configured relay is refused rather than passed on. If `/api/turn` answers
+`configured:false` with a `reason` saying there is no `turn:` url, the secret is
+set but points at a `stun:` server — edit it to the provider's `turn:` entries.
+Reporting it as ready would be worse: the app would stop falling back to the
+public cloud and then fail anyway, which looks identical to "sharing is broken".
 
 (With a terminal, secrets are set with
 `npx wrangler secret put TURN_API_KEY --config ../wrangler.toml`, from

@@ -44,6 +44,19 @@
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
+  // Mirrors the Worker's check. A turn:/turns: url with credentials is the only
+  // thing that gets through a network which blocks peer-to-peer; STUN alone
+  // cannot, so it is not worth trading the working defaults for.
+  function canRelay(iceServers) {
+    if (!Array.isArray(iceServers)) return false;
+    return iceServers.some((server) => {
+      if (!server || typeof server !== 'object') return false;
+      const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+      const hasTurn = urls.some((url) => typeof url === 'string' && /^turns?:/i.test(url.trim()));
+      return hasTurn && Boolean(server.username || server.credential);
+    });
+  }
+
   function showView(name) {
     for (const [key, element] of Object.entries(views)) element.hidden = key !== name;
   }
@@ -112,7 +125,12 @@
     if (base.config?.iceServers?.length) return base;
     try {
       const relay = await api('/turn');
-      if (relay?.iceServers?.length) base.config = { ...(base.config || {}), iceServers: relay.iceServers };
+      // Only adopt a list that can actually relay. Replacing the defaults with
+      // STUN alone would drop the peer-to-peer fallback and change nothing on a
+      // network that blocks it, so the failure would look identical either way.
+      if (canRelay(relay?.iceServers)) {
+        base.config = { ...(base.config || {}), iceServers: relay.iceServers };
+      }
     } catch { /* no relay: fall back to the public cloud */ }
     return base;
   }

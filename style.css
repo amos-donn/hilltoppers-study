@@ -1,20 +1,24 @@
 /* StudyStream Topping.
- * Sized for the Hilltoppers Topping iframe: about 318px wide, ~360px tall.
- * No fixed pixel widths; everything wraps and stays inside the card. The
- * wrapper [data-topping-content] carries the natural height that resize.js
- * reports when the Topping is set to Fit content. */
+ * Matches the Hilltoppers popup: light surface, SJA green accent, the same
+ * card, button and input shapes, and the same system font stack.
+ * Sized for the Topping iframe: about 318px wide, ~360px tall. No fixed pixel
+ * widths; text wraps and stays inside the card. The wrapper [data-topping-content]
+ * carries the natural height that resize.js reports for Fit content. */
 
 :root {
-  color-scheme: dark;
-  --bg: #0f172a;
-  --panel: #1b2438;
-  --line: #33415c;
-  --text: #e7ecf5;
-  --muted: #9fb0cc;
-  --accent: #4f8cff;
-  --good: #3ddc97;
-  --warn: #ffcc66;
-  --bad: #ff8080;
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --surface-muted: #f0f2f5;
+  --border: rgba(17, 17, 17, 0.18);
+  --border-soft: rgba(17, 17, 17, 0.08);
+  --text: #111111;
+  --heading: #161b22;
+  --muted: #7d8591;
+  --label: #555f6a;
+  --accent: #1a7f37;
+  --accent-muted: rgba(26, 127, 55, 0.12);
+  --accent-border: rgba(26, 127, 55, 0.25);
+  --danger: #bc4c2c;
 }
 
 * { box-sizing: border-box; }
@@ -23,7 +27,9 @@ html, body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 /* The reported-height element. Natural height by design: do not give it a
@@ -33,19 +39,56 @@ html, body {
   width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: 10px;
+  padding: 9px;
 }
 
-.app { display: flex; flex-direction: column; gap: 10px; }
+.app { display: flex; flex-direction: column; gap: 9px; }
 
-.view { display: flex; flex-direction: column; gap: 10px; }
+.view { display: flex; flex-direction: column; gap: 9px; }
 .view[hidden] { display: none; }
 
-.h1 { margin: 0; font-size: 15px; font-weight: 650; }
-.muted { margin: 0; color: var(--muted); }
-.small { font-size: 12px; }
-.label { margin: 0; font-size: 12px; color: var(--muted); }
-.error { margin: 0; color: var(--bad); font-size: 12.5px; }
+/* Top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.app-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--heading); }
+.statusbar { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #a0a7b0; flex: 0 0 auto; }
+.dot.online { background: var(--accent); }
+.dot.waiting { background: #f39c3d; }
+.dot.offline { background: var(--danger); }
+
+/* Card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--heading); }
+.code-card { align-items: center; text-align: center; }
+.field-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.code {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--heading);
+  font-variant-numeric: tabular-nums;
+}
+.note { margin: 0; font-size: 12px; color: var(--muted); }
+.error { margin: 0; font-size: 12.5px; color: var(--danger); font-weight: 500; }
 .error[hidden] { display: none; }
 
 .sr-only {
@@ -53,84 +96,130 @@ html, body {
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Status bar */
-.statusbar { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7a94; flex: 0 0 auto; }
-.dot.online { background: var(--good); }
-.dot.waiting { background: var(--warn); }
-.dot.offline { background: var(--bad); }
-
-/* Buttons */
+/* Buttons: same shapes as the popup's secondary controls and the settings
+   page's primary button. */
 button {
-  font: inherit; cursor: pointer; border-radius: 8px; padding: 7px 11px;
-  border: 1px solid var(--line); background: transparent; color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--label);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
-button:disabled { opacity: .55; cursor: default; }
-.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.ghost { background: transparent; }
+button:disabled { opacity: 0.6; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Code display */
-.code-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.code { font-size: 20px; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
-.code.big { font-size: 18px; letter-spacing: 4px; }
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+.primary:not(:disabled):hover { box-shadow: 0 8px 16px rgba(26, 127, 55, 0.25); transform: translateY(-1px); }
 
-.join { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.code-input {
-  flex: 1 1 110px; min-width: 0; font: inherit; padding: 7px 9px;
-  border-radius: 8px; border: 1px solid var(--line); background: #0b1222; color: var(--text);
-  text-transform: uppercase; letter-spacing: 1px;
+.secondary { font-weight: 500; }
+.secondary:not(:disabled):hover { background: #f3f5f7; border-color: rgba(17, 17, 17, 0.28); }
+
+.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.ghost:not(:disabled):hover { background: var(--surface-muted); color: var(--label); }
+.ghost.danger { color: var(--danger); align-self: flex-start; }
+.ghost.danger:not(:disabled):hover { background: rgba(188, 76, 44, 0.12); color: var(--danger); }
+
+/* Inputs */
+.join { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.code-input, .composer input {
+  min-width: 0;
+  font: inherit;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.code-input { flex: 1 1 96px; text-transform: uppercase; letter-spacing: 1px; }
+.code-input::placeholder, .composer input::placeholder { color: var(--muted); letter-spacing: normal; }
+.code-input:focus, .composer input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row.end { justify-content: flex-end; }
+.controls { align-items: center; }
 
 /* Screen preview */
 .video-wrap {
-  position: relative; background: #000; border-radius: 8px; overflow: hidden;
-  width: 100%; height: 150px; flex: 0 0 auto; border: 1px solid var(--line);
+  position: relative;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  height: 150px;
+  flex: 0 0 auto;
 }
 .video-wrap[hidden] { display: none; }
-.video-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.video-wrap video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .video-label {
-  position: absolute; left: 7px; top: 6px; font-size: 11px; padding: 2px 6px;
-  border-radius: 5px; background: rgba(0, 0, 0, .6); color: #dfe7f5;
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(17, 17, 17, 0.72);
+  color: #ffffff;
 }
 
-.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-/* Chat */
+/* Chat: the popup's schedule list — one bordered surface, rows divided by a
+   hairline. */
 .messages {
-  min-height: 90px; max-height: 220px; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 6px;
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #0b1222;
+  display: flex;
+  flex-direction: column;
+  min-height: 84px;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
-.msg { display: flex; flex-direction: column; gap: 1px; }
-.msg .who { font-size: 11px; color: var(--muted); }
-.msg .text { white-space: pre-wrap; }
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 11px;
+}
+.msg + .msg { border-top: 1px solid var(--border-soft); }
+.msg .who { font-size: 11px; font-weight: 600; color: var(--muted); }
+.msg .text { font-size: 13px; color: var(--text); white-space: pre-wrap; }
 .msg.mine .who { color: var(--accent); }
+.msg.system { background: var(--surface-muted); }
 .msg.system .text { color: var(--muted); font-style: italic; }
 
-.composer { display: flex; gap: 8px; align-items: center; }
-.composer input {
-  flex: 1 1 auto; min-width: 0; font: inherit; padding: 7px 9px;
-  border-radius: 8px; border: 1px solid var(--line); background: #0b1222; color: var(--text);
-}
+.composer { display: flex; gap: 8px; align-items: stretch; }
+.composer input { flex: 1 1 auto; }
 
 /* Overlays (consent, first-run notice) */
 .overlay {
-  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
-  padding: 12px; background: rgba(4, 8, 18, .72);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(17, 17, 17, 0.55);
 }
 .overlay[hidden] { display: none; }
-.card {
-  width: 100%; max-width: 300px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
-}
-.consent-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
-.consent-check input { margin-top: 2px; }
+.dialog { width: 100%; max-width: 300px; box-shadow: 0 5px 16px rgba(17, 17, 17, 0.12); }
+.consent-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--label); }
+.consent-check input { margin: 2px 0 0; }
 
 /* Narrower than the Topping width, if it ever happens. */
 @media (max-width: 340px) {
   .composer, .join { gap: 6px; }
-  .code { font-size: 18px; }
+  .code { font-size: 20px; }
 }

@@ -6,5 +6,13 @@
  */
 window.STUDYSTREAM_API = 'https://hilltoppers-study.amos-donn.workers.dev';
 
-/* Set to '' to keep using the public PeerJS cloud for the WebRTC handshake. */
+/* Relay (TURN) servers for the WebRTC handshake.
+ *
+ * Leave this empty. The Worker hands out short-lived Cloudflare TURN
+ * credentials at /api/turn, and the app merges them in automatically. That is
+ * what lets two students on a network that blocks peer-to-peer still connect.
+ *
+ * If you set config.iceServers here instead, the app uses yours and skips the
+ * Worker. That is only useful for a fixed, self-hosted TURN server.
+ */
 window.STUDYSTREAM_PEER = {};

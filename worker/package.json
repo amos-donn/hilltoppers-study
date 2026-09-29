@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8791",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --port 8791 --config ../wrangler.toml",
+    "build": "wrangler deploy --dry-run --outdir dist --config ../wrangler.toml",
+    "deploy": "wrangler deploy --config ../wrangler.toml",
     "typecheck": "tsc --noEmit",
     "test:manual": "node scripts/manual-test.mjs"
   },

@@ -78,13 +78,25 @@ These are the steps that match the current Cloudflare setup: Worker
 
 ### 1. Worker
 
+`wrangler.toml` lives at the **repository root** because Cloudflare runs the
+build from the repo root. It points `main` at `worker/src/index.ts`.
+
 ```sh
 cd worker
 npm ci
-npx wrangler d1 execute studystream-sessions --config wrangler.toml --remote --file=schema.sql
-npx wrangler secret put SESSION_HMAC_KEY         # any 32+ character random string
+npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
+npx wrangler secret put SESSION_HMAC_KEY --config ../wrangler.toml   # any 32+ character random string
 npm run deploy
 ```
+
+In the Cloudflare dashboard, the Worker's build (Settings → Build) must be:
+
+- **Root directory:** the repository root (leave empty)
+- **Build command:** `cd worker && npm ci`
+- **Deploy command:** `npx wrangler deploy --config ../wrangler.toml`
+
+If it is left as a static site / assets Worker, the Worker serves the repo files
+instead of running the API and `/api/health` returns a bare 404.
 
 If you changed the binding name or database id, keep `wrangler.toml` and the
 dashboard in sync. `DB_BINDING` in `wrangler.toml` must match the variable name

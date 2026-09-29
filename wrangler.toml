@@ -1,8 +1,11 @@
-# StudyStream Worker. The Topping website is served by GitHub Pages; this Worker
-# only answers /api/*. The binding and database ids below match the deployed
-# Worker and D1 database in the Cloudflare dashboard.
+# StudyStream Worker.
+#
+# Cloudflare is connected to this repository root, so this file lives at the
+# root too, not inside worker/. It runs the Worker in worker/src/index.ts and
+# exposes the D1 database as DB_BINDING. The Topping website itself is served by
+# GitHub Pages; this Worker only answers /api/*.
 name = "hilltoppers-study"
-main = "src/index.ts"
+main = "worker/src/index.ts"
 compatibility_date = "2026-09-16"
 workers_dev = true
 
@@ -26,6 +29,7 @@ binding = "DB_BINDING"
 database_name = "studystream-sessions"
 database_id = "7cfc650d-c260-4857-b3cc-8f23b36223cb"
 
-# Set SESSION_HMAC_KEY with `npx wrangler secret put SESSION_HMAC_KEY`.
-# It signs account tokens; the Worker refuses to serve /api with a missing or
-# short key instead of falling back to a guessable default.
+# Set SESSION_HMAC_KEY in the dashboard (Settings -> Variables and Secrets), or
+# with `npx wrangler secret put SESSION_HMAC_KEY`. It signs account tokens; the
+# Worker refuses to serve /api with a missing or short key instead of falling
+# back to a guessable default.

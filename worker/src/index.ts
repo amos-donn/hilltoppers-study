@@ -18,8 +18,17 @@ export interface Env {
   // cloud and screen sharing only works on open networks.
   TURN_KEY_ID?: string;
   TURN_API_TOKEN?: string;
+  // Metered's free plan (the "Open Relay" project): 20 GB/month and no card,
+  // only an email signup. Preferred over Cloudflare because it needs no
+  // billing details. Set TURN_API_KEY to switch this on.
+  TURN_API_KEY?: string;
+  // A fixed relay server, for a self-hosted coturn or any provider that hands
+  // you a long-lived username and password. TURN_URLS is comma-separated.
+  TURN_URLS?: string;
+  TURN_USERNAME?: string;
+  TURN_CREDENTIAL?: string;
   // Override for the credential endpoint. Only for tests or a self-hosted
-  // issuer; leave unset to use Cloudflare.
+  // issuer; leave unset to use Metered.
   TURN_API_BASE?: string;
 }
 
@@ -95,14 +104,35 @@ function ensureSchema(db: D1Database): Promise<void> {
 }
 
 const TURN_TTL = 4 * 60 * 60;
+const METERED_CREDENTIALS = 'https://a.metered.live/api/v1/turn/credentials';
 
-// Short-lived relay credentials from Cloudflare Calls TURN. The browser needs
-// these to reach a classmate when the school network blocks peer-to-peer; the
-// TURN key stays here and is never sent to a student.
+// Short-lived relay credentials for the browser. The browser needs these to
+// reach a classmate when the school network blocks peer-to-peer; the provider
+// key stays here and is never sent to a student.
+//
+// Three shapes are supported, checked in order:
+//   1. a fixed relay server (self-hosted coturn, or any long-lived credentials)
+//   2. Metered's free plan, which needs only an email signup and no card
+//   3. Cloudflare Calls TURN, which requires billing details on the account
+// With none configured this is not an error: the site keeps working over the
+// public PeerJS cloud, though screen sharing then only works on open networks.
 async function turnCredentials(env: Env): Promise<Response> {
+  const fixed = fixedIceServers(env);
+  if (fixed.length > 0) return json({ configured: true, iceServers: fixed }, 200);
+
+  if (env.TURN_API_KEY) {
+    const url = `${env.TURN_API_BASE || METERED_CREDENTIALS}?apiKey=${encodeURIComponent(env.TURN_API_KEY)}`;
+    const response = await fetch(url);
+    if (!response.ok) return json({ error: 'Could not get relay credentials.' }, 502);
+    const data = (await response.json()) as unknown;
+    // Metered returns the iceServers array directly; older shapes wrap it.
+    const list = Array.isArray(data) ? data : (data as { iceServers?: unknown })?.iceServers;
+    const iceServers = Array.isArray(list) ? list : [];
+    return json({ configured: iceServers.length > 0, iceServers }, 200);
+  }
+
   const keyId = env.TURN_KEY_ID;
   const token = env.TURN_API_TOKEN;
-  // Not an error: the site keeps working over the public PeerJS cloud.
   if (!keyId || !token) return json({ configured: false, iceServers: [] }, 200);
 
   const base = env.TURN_API_BASE || 'https://rtc.live.cloudflare.com/v1/turn/keys';
@@ -118,6 +148,20 @@ async function turnCredentials(env: Env): Promise<Response> {
   const data = (await response.json()) as { iceServers?: unknown };
   const iceServers = Array.isArray(data?.iceServers) ? data.iceServers : [];
   return json({ configured: iceServers.length > 0, iceServers }, 200);
+}
+
+// A relay the operator configured by hand. URLs are comma-separated so a
+// provider can offer several endpoints at once.
+function fixedIceServers(env: Env): unknown[] {
+  const urls = (env.TURN_URLS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (urls.length === 0) return [];
+  const server: Record<string, unknown> = { urls: urls.length === 1 ? urls[0] : urls };
+  if (env.TURN_USERNAME) server.username = env.TURN_USERNAME;
+  if (env.TURN_CREDENTIAL) server.credential = env.TURN_CREDENTIAL;
+  return [server];
 }
 
 interface SessionRow {

@@ -10,6 +10,7 @@ extension itself.
 - Chat and screen sharing go straight between the two browsers. The Worker
   never sees a message or a pixel.
 
+![The home view](docs/home.png)
 ![The session view](docs/session.png)
 
 ## How a session works
@@ -21,6 +22,14 @@ extension itself.
 3. The invited side accepts. Only one side dials through PeerJS, so exactly one
    chat channel and one screen call exist per room.
 4. Either side can share a screen. A room is 1:1 and ends after two hours.
+
+## Look and feel
+
+The Topping matches the Hilltoppers popup rather than inventing its own style:
+the same light surface (`#f7f8fb` behind white cards), the same SJA green
+accent (`#1a7f37`), the same system font stack, and the same card, button and
+input shapes and border colours. A classmate who opens it should not be able to
+tell it was built separately.
 
 ## Layout
 

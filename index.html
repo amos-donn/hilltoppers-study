@@ -10,27 +10,34 @@
 <body>
   <main data-topping-content class="app">
 
-    <header class="statusbar">
-      <span class="dot" id="status-dot" aria-hidden="true"></span>
-      <span class="status" id="status-text" role="status">Starting…</span>
+    <header class="topbar">
+      <h1 class="app-title">StudyStream</h1>
+      <span class="statusbar">
+        <span class="dot" id="status-dot" aria-hidden="true"></span>
+        <span id="status-text" role="status">Starting…</span>
+      </span>
     </header>
 
     <!-- Could not reach the StudyStream server. -->
     <section class="view" id="view-offline" hidden>
-      <h1 class="h1">StudyStream is offline</h1>
-      <p class="muted">The study server could not be reached. Check the connection and reload the Topping.</p>
-      <button class="primary" id="retry">Try again</button>
+      <div class="card">
+        <h2 class="card-title">StudyStream is offline</h2>
+        <p class="note">The study server could not be reached. Check the connection and reload the Topping.</p>
+        <button class="primary" id="retry" type="button">Try again</button>
+      </div>
     </section>
 
     <!-- Home: your code, or invite a classmate by theirs. -->
     <section class="view" id="view-home" hidden>
-      <p class="label">Your code</p>
-      <div class="code-row">
+      <div class="card code-card">
+        <p class="field-label">Your code</p>
         <strong class="code" id="my-code" aria-live="polite">······</strong>
-        <button class="ghost" id="copy-code" type="button">Copy</button>
-        <button class="ghost" id="share-code" type="button">Share</button>
+        <div class="row">
+          <button class="ghost" id="copy-code" type="button">Copy</button>
+          <button class="ghost" id="share-code" type="button">Share</button>
+        </div>
+        <p class="note">Give this code to a classmate, or enter theirs below.</p>
       </div>
-      <p class="muted small">Give this code to a classmate, or enter theirs below.</p>
 
       <form id="join-form" class="join" autocomplete="off">
         <label class="sr-only" for="join-code">Classmate's code</label>
@@ -44,11 +51,13 @@
 
     <!-- Waiting: invite sent, or waiting for a classmate to accept ours. -->
     <section class="view" id="view-waiting" hidden>
-      <h1 class="h1" id="waiting-heading">Waiting for a classmate</h1>
-      <strong class="code big" id="waiting-code" aria-live="polite"></strong>
-      <p class="muted small" id="waiting-note"></p>
-      <div class="row end" id="accept-slot"></div>
-      <button class="ghost" id="cancel-wait" type="button">Cancel</button>
+      <div class="card">
+        <h2 class="card-title" id="waiting-heading">Waiting for a classmate</h2>
+        <strong class="code" id="waiting-code" aria-live="polite"></strong>
+        <p class="note" id="waiting-note"></p>
+        <div class="row end" id="accept-slot"></div>
+        <button class="ghost" id="cancel-wait" type="button">Cancel</button>
+      </div>
     </section>
 
     <!-- Session: screen preview, chat, and share controls. -->
@@ -58,10 +67,10 @@
         <span class="video-label" id="video-label"></span>
       </div>
 
-      <div class="controls">
-        <button class="ghost" id="share" type="button">Share screen</button>
-        <button class="ghost" id="stop-share" type="button" hidden>Stop</button>
-        <span class="muted small" id="share-status" role="status"></span>
+      <div class="row controls">
+        <button class="secondary" id="share" type="button">Share screen</button>
+        <button class="secondary" id="stop-share" type="button" hidden>Stop sharing</button>
+        <span class="note" id="share-status" role="status"></span>
       </div>
 
       <div id="messages" class="messages" role="log" aria-label="Chat" aria-live="polite"></div>
@@ -72,15 +81,15 @@
         <button class="primary" id="send" type="submit">Send</button>
       </form>
 
-      <button class="ghost" id="end" type="button">Leave session</button>
+      <button class="ghost danger" id="end" type="button">Leave session</button>
     </section>
 
     <!-- Consent before the first screen share. Not a browser dialog: the
          extension sandbox blocks window.confirm. -->
     <div class="overlay" id="consent" hidden>
-      <div class="card" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-        <h2 class="h1" id="consent-title">Share your screen?</h2>
-        <p class="muted small">Your classmate will see the screen you pick until you press Stop. Chat stays text.</p>
+      <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+        <h2 class="card-title" id="consent-title">Share your screen?</h2>
+        <p class="note">Your classmate will see the screen you pick until you press Stop. Chat stays text.</p>
         <label class="consent-check">
           <input type="checkbox" id="consent-check">
           <span>I understand my classmate can see my screen.</span>
@@ -94,10 +103,10 @@
 
     <!-- One-time first-run notice. -->
     <div class="overlay" id="warning" hidden>
-      <div class="card" role="dialog" aria-modal="true" aria-labelledby="warning-title">
-        <h2 class="h1" id="warning-title">How StudyStream works</h2>
-        <p class="muted small">Chat and screen sharing go straight between you and your classmate. The server only matches your codes and never sees your messages or your screen.</p>
-        <p class="muted small">Screen sharing needs permission in the Hilltoppers popup. If the Share button does nothing, ask to have it enabled.</p>
+      <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="warning-title">
+        <h2 class="card-title" id="warning-title">How StudyStream works</h2>
+        <p class="note">Chat and screen sharing go straight between you and your classmate. The server only matches your codes and never sees your messages or your screen.</p>
+        <p class="note">Screen sharing needs permission in the Hilltoppers popup. If the Share button does nothing, ask to have it enabled.</p>
         <div class="row end">
           <button class="primary" id="warning-ok" type="button">Got it</button>
         </div>

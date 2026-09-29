@@ -35,6 +35,56 @@ function normalizeCode(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+// Mirrors worker/schema.sql. The Worker creates its own tables on first use so
+// a deploy needs only the binding, not a `wrangler d1 execute` step. Every
+// statement is idempotent, so this is safe to repeat.
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS users (
+    account_id TEXT PRIMARY KEY,
+    handle TEXT NOT NULL UNIQUE,
+    secret_salt TEXT NOT NULL,
+    secret_hash TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    host_account TEXT NOT NULL REFERENCES users(account_id) ON DELETE CASCADE,
+    host_peer TEXT,
+    guest_account TEXT REFERENCES users(account_id) ON DELETE SET NULL,
+    guest_peer TEXT,
+    guest_accepted INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    ended_by TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_sessions_code ON sessions(code)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_account)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_account)',
+  `CREATE TABLE IF NOT EXISTS counters (
+    key TEXT PRIMARY KEY,
+    value INTEGER NOT NULL DEFAULT 0
+  )`
+];
+
+let schemaReady: Promise<void> | null = null;
+
+// Runs once per isolate; a failure clears the cache so the next request retries.
+function ensureSchema(db: D1Database): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
+      .then(() => undefined)
+      .catch((error) => {
+        schemaReady = null;
+        throw error;
+      });
+  }
+  return schemaReady;
+}
+
 interface SessionRow {
   id: string; code: string; host_account: string; host_peer: string | null;
   guest_account: string | null; guest_peer: string | null; guest_accepted: number;
@@ -160,6 +210,18 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
   const db = env.DB_BINDING;
   const now = nowSeconds();
   const path = url.pathname.replace(/^\/api/, '') || '/';
+
+  // Sets up the tables on first hit so a fresh deploy needs no CLI step.
+  if (path === '/setup') {
+    try {
+      await ensureSchema(db);
+      return json({ ok: true, service: 'studystream', tables: 'ready' }, 200);
+    } catch (error) {
+      return json({ error: 'Could not set up the database.', detail: String(error) }, 500);
+    }
+  }
+
+  await ensureSchema(db);
 
   if (path === '/health') return json({ ok: true, configured: true, service: 'studystream' }, 200);
 

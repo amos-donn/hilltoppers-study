@@ -81,14 +81,6 @@ These are the steps that match the current Cloudflare setup: Worker
 `wrangler.toml` lives at the **repository root** because Cloudflare runs the
 build from the repo root. It points `main` at `worker/src/index.ts`.
 
-```sh
-cd worker
-npm ci
-npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
-npx wrangler secret put SESSION_HMAC_KEY --config ../wrangler.toml   # any 32+ character random string
-npm run deploy
-```
-
 In the Cloudflare dashboard, the Worker's build (Settings → Build) must be:
 
 - **Root directory:** the repository root (leave empty)
@@ -98,12 +90,38 @@ In the Cloudflare dashboard, the Worker's build (Settings → Build) must be:
 If it is left as a static site / assets Worker, the Worker serves the repo files
 instead of running the API and `/api/health` returns a bare 404.
 
+**The database tables are created automatically.** The Worker runs the
+statements in `worker/schema.sql` on its first request, so there is no
+`wrangler d1 execute` step and no terminal needed. After the build is set and the
+secret below is added, open
+`https://hilltoppers-study.amos-donn.workers.dev/api/setup` once to create the
+tables (any API call does it too).
+
+**The signing secret is the one thing to add by hand.** In the dashboard:
+Worker → **Settings → Variables and Secrets → Add → Secret**, name
+`SESSION_HMAC_KEY`, value any random string of 32+ characters. Without it the
+Worker answers `StudyStream is not configured yet`.
+
 If you changed the binding name or database id, keep `wrangler.toml` and the
 dashboard in sync. `DB_BINDING` in `wrangler.toml` must match the variable name
 the dashboard shows on the Worker's settings page.
 
 `ALLOWED_ORIGINS` in `wrangler.toml` must list the site's origin
 (`https://amos-donn.github.io`) so the browser is allowed to call `/api`.
+
+<details>
+<summary>Deploying with a terminal instead (optional)</summary>
+
+```sh
+cd worker
+npm ci
+npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
+npx wrangler secret put SESSION_HMAC_KEY --config ../wrangler.toml
+npm run deploy
+```
+
+The `d1 execute` line is optional: the Worker creates the tables itself.
+</details>
 
 ### 2. Website
 

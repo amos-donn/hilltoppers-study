@@ -1,5 +1,10 @@
 -- StudyStream D1 schema.
--- Run this from the worker/ folder; the config lives one level up.
+--
+-- The Worker applies these statements itself on its first request, so usually
+-- nothing needs to run here. `worker/src/index.ts` keeps its own copy in
+-- SCHEMA_STATEMENTS; keep the two in sync when this file changes.
+--
+-- To apply it by hand (optional), from the worker/ folder:
 --   npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
 -- All statements are idempotent, so re-applying after an update is safe.
 

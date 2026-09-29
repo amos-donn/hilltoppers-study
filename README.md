@@ -1,4 +1,4 @@
-# StudyStream
+# Hilltoppers Study
 
 A Hilltoppers Topping for studying with one classmate at a time: a text chat
 and a screen share, side by side, while you both work. It is a plain website
@@ -172,7 +172,7 @@ tables (any API call does it too).
 **The signing secret is the one thing to add by hand.** In the dashboard:
 Worker → **Settings → Variables and Secrets → Add → Secret**, name
 `SESSION_HMAC_KEY`, value any random string of 32+ characters. Without it the
-Worker answers `StudyStream is not configured yet`.
+Worker answers `Hilltoppers Study is not configured yet`.
 
 If you changed the binding name or database id, keep `wrangler.toml` and the
 dashboard in sync. `DB_BINDING` in `wrangler.toml` must match the variable name

@@ -1,4 +1,4 @@
-// Two-window manual test for StudyStream.
+// Two-window manual test for Hilltoppers Study.
 //
 //   node scripts/manual-test.mjs https://<your-worker>.workers.dev
 //
@@ -35,7 +35,7 @@ async function register() {
   return { status, ...data };
 }
 
-console.log('StudyStream manual API test against ' + base + '\n');
+console.log('Hilltoppers Study manual API test against ' + base + '\n');
 
 try {
   const health = await call('/health');

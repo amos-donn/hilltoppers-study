@@ -1,12 +1,12 @@
-name = "studystream"
+# StudyStream Worker. The Topping website is served by GitHub Pages; this Worker
+# only answers /api/*. The binding and database ids below match the deployed
+# Worker and D1 database in the Cloudflare dashboard.
+name = "hilltoppers-study"
 main = "src/index.ts"
 compatibility_date = "2026-09-16"
 workers_dev = true
 
-# The Topping website is served by GitHub Pages. This Worker only answers
-# /api/*, so it has no assets binding.
-
-# Rate-limit unauthenticated and room-code endpoints.
+# Rate-limit unauthenticated lookup and room-code endpoints.
 [[ratelimits]]
 name = "JOIN_LIMITER"
 namespace_id = "3403"
@@ -18,14 +18,13 @@ simple = { limit = 30, period = 60 }
 crons = ["0 * * * *"]
 
 [vars]
-# Origins allowed to call /api. The Topping is hosted on GitHub Pages; the
-# Worker's own origin is always allowed.
+# Origins allowed to call /api. The Topping is hosted on GitHub Pages.
 ALLOWED_ORIGINS = "https://amos-donn.github.io"
 
 [[d1_databases]]
-binding = "SESSIONS_DB"
+binding = "DB_BINDING"
 database_name = "studystream-sessions"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "7cfc650d-c260-4857-b3cc-8f23b36223cb"
 
 # Set SESSION_HMAC_KEY with `npx wrangler secret put SESSION_HMAC_KEY`.
 # It signs account tokens; the Worker refuses to serve /api with a missing or

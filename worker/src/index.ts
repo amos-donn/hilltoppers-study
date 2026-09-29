@@ -6,7 +6,7 @@ import {
 } from './http';
 
 export interface Env {
-  SESSIONS_DB: D1Database;
+  DB_BINDING: D1Database;
   JOIN_LIMITER: RateLimit;
   SESSION_HMAC_KEY?: string;
   // Comma-separated origins allowed to call /api. Defaults to this Worker's
@@ -157,7 +157,7 @@ function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
 async function apiResponse(request: Request, env: Env, url: URL): Promise<Response> {
   const key = requireSigningKey(env);
   if (!key) return json({ error: 'StudyStream is not configured yet.' }, 503);
-  const db = env.SESSIONS_DB;
+  const db = env.DB_BINDING;
   const now = nowSeconds();
   const path = url.pathname.replace(/^\/api/, '') || '/';
 
@@ -276,14 +276,14 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
 
 async function cleanup(env: Env): Promise<void> {
   const now = nowSeconds();
-  await env.SESSIONS_DB.prepare(
+  await env.DB_BINDING.prepare(
     'UPDATE sessions SET ended_at = ?, ended_by = ? WHERE ended_at IS NULL AND expires_at <= ?'
   ).bind(now, 'timeout', now).run();
-  await env.SESSIONS_DB.prepare(
+  await env.DB_BINDING.prepare(
     'DELETE FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?'
   ).bind(now - 24 * 60 * 60).run();
   // Cascades remove the account's sessions.
-  await env.SESSIONS_DB.prepare('DELETE FROM users WHERE last_seen < ?').bind(now - IDLE_ACCOUNT_TTL).run();
+  await env.DB_BINDING.prepare('DELETE FROM users WHERE last_seen < ?').bind(now - IDLE_ACCOUNT_TTL).run();
 }
 
 export default {

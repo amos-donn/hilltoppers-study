@@ -1,4 +1,4 @@
-// StudyStream client for the Hilltoppers Topping Bar.
+// Hilltoppers Study client for the Hilltoppers Topping Bar.
 // The Topping runs in a sandboxed iframe and reports its height back to the
 // extension through resize.js. Signing in, code lookup and room authorization
 // go through the Worker's /api routes. PeerJS carries the WebRTC handshake.
@@ -73,7 +73,7 @@
   }
 
   async function api(path, options = {}) {
-    if (!API_BASE) throw new Error('StudyStream is not configured.');
+    if (!API_BASE) throw new Error('Hilltoppers Study is not configured.');
     const headers = { ...(options.headers || {}) };
     if (options.body) headers['Content-Type'] = 'application/json';
     if (state.token) headers.Authorization = 'Bearer ' + state.token;
@@ -456,8 +456,8 @@
   $('share-code').onclick = async () => {
     const url = location.origin + location.pathname;
     try {
-      if (navigator.share) await navigator.share({ title: 'StudyStream', text: 'Study with me on StudyStream. My code: ' + state.handle });
-      else await navigator.clipboard.writeText('Study with me on StudyStream: ' + url + '  My code: ' + state.handle);
+      if (navigator.share) await navigator.share({ title: 'Hilltoppers Study', text: 'Study with me on Hilltoppers Study. My code: ' + state.handle });
+      else await navigator.clipboard.writeText('Study with me on Hilltoppers Study: ' + url + '  My code: ' + state.handle);
     } catch { /* the classmate can read the code instead */ }
   };
 

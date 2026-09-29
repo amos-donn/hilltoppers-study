@@ -1,4 +1,4 @@
-name: Check StudyStream
+name: Check Hilltoppers Study
 
 on:
   push:

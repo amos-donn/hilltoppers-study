@@ -1,4 +1,4 @@
-// Shared HTTP + crypto helpers for the StudyStream Worker.
+// Shared HTTP + crypto helpers for the Hilltoppers Study Worker.
 
 export function json(data: unknown, status: number): Response {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });

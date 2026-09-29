@@ -1,4 +1,4 @@
--- StudyStream D1 schema.
+-- Hilltoppers Study D1 schema.
 --
 -- The Worker applies these statements itself on its first request, so usually
 -- nothing needs to run here. `worker/src/index.ts` keeps its own copy in

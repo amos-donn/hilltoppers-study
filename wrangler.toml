@@ -1,4 +1,4 @@
-# StudyStream Worker.
+# Hilltoppers Study Worker.
 #
 # Cloudflare is connected to this repository root, so this file lives at the
 # root too, not inside worker/. It runs the Worker in worker/src/index.ts and

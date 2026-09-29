@@ -1,4 +1,4 @@
-// StudyStream Worker: authenticates students, owns lookup codes, and keeps the
+// Hilltoppers Study Worker: authenticates students, owns lookup codes, and keeps the
 // small session registry that lets two classmates find each other. PeerJS
 // carries the WebRTC handshake; chat and screen media never pass through here.
 import {
@@ -305,7 +305,7 @@ function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
     return Promise.resolve(new Response(null, { status: origin ? 204 : 403, headers: cors }));
   }
   if (!origin) {
-    return Promise.resolve(json({ error: 'Open StudyStream to use it.' }, 403));
+    return Promise.resolve(json({ error: 'Open Hilltoppers Study to use it.' }, 403));
   }
   return apiResponse(request, env, url).then((response) => {
     for (const [name, value] of Object.entries(cors)) response.headers.set(name, value);
@@ -315,7 +315,7 @@ function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
 
 async function apiResponse(request: Request, env: Env, url: URL): Promise<Response> {
   const key = requireSigningKey(env);
-  if (!key) return json({ error: 'StudyStream is not configured yet.' }, 503);
+  if (!key) return json({ error: 'Hilltoppers Study is not configured yet.' }, 503);
   const db = env.DB_BINDING;
   const now = nowSeconds();
   const path = url.pathname.replace(/^\/api/, '') || '/';

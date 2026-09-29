@@ -1,4 +1,4 @@
-/* Deployment settings for StudyStream.
+/* Deployment settings for Hilltoppers Study.
  *
  * STUDYSTREAM_API is the base URL of the Worker that hands out lookup codes
  * and authorizes rooms. It is empty by default, which would make the app show

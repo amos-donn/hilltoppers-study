@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>StudyStream</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,12 +12,20 @@
   <main data-topping-content class="app" id="app">
 
     <header class="topbar">
-      <h1 class="app-title">StudyStream</h1>
+      <span class="brand-head">
+        <img class="logo" src="logo.png" alt="" width="28" height="28">
+        <h1 class="app-title">StudyStream</h1>
+      </span>
       <span class="statusbar">
         <span class="dot" id="status-dot" aria-hidden="true"></span>
         <span id="status-text" role="status">Starting…</span>
       </span>
     </header>
+
+    <div class="brand">
+      <hr class="brand-rule">
+      <p class="brand-credit">var / study - a hilltoppers/var project</p>
+    </div>
 
     <!-- Could not reach the StudyStream server. -->
     <section class="view" id="view-offline" hidden>

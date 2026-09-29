@@ -32,6 +32,11 @@ accent (`#1a7f37`), the same system font stack, and the same card, button and
 input shapes and border colours. A classmate who opens it should not be able to
 tell it was built separately.
 
+The mark (`logo.png`, from `favicon.png`) sits beside the title, and a hairline
+under the header carries the credit line `var / study - a hilltoppers/var
+project`. `favicon.png` is also the tab icon and `apple-touch-icon.png` the
+home-screen icon; the three are scaled from the same source square.
+
 ## Layout
 
 The panel is about **318 × 360 px**. The page is built to that width: the layout

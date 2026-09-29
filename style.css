@@ -61,6 +61,16 @@ html, body {
 .dot.waiting { background: #f39c3d; }
 .dot.offline { background: var(--danger); }
 
+.logo { width: 28px; height: 28px; flex: 0 0 auto; display: block; }
+/* Logo and title stay together on the left, so space-between pushes only the
+   status to the right. */
+.brand-head { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* Credit under the title, with a hairline between. */
+.brand { margin-top: -2px; }
+.brand-rule { height: 0; margin: 0; border: 0; border-top: 1px solid var(--border-soft); }
+.brand-credit { margin: 5px 0 0; font-size: 10.5px; color: var(--muted); }
+
 /* Card */
 .card {
   background: var(--surface);
@@ -206,6 +216,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
    viewport height and scrolls with the page, which also sidesteps the iframe
    fullscreen restriction. */
 .app.filling .topbar,
+.app.filling .brand,
 .app.filling #view-session > .controls,
 .app.filling #view-session > .messages,
 .app.filling #view-session > .composer,

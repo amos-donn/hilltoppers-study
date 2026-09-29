@@ -77,27 +77,42 @@ direct peer-to-peer route. Chat usually still works because it is small, but a
 screen share is a continuous stream and cannot, so it looks like "sharing is
 broken on school wifi".
 
-The fix is a relay, or TURN, server. The Worker hands out short-lived Cloudflare
-TURN credentials from `/api/turn`, and the app adds them to the connection
-automatically. The TURN key stays on the server; students only ever get a
-credential that expires in a few hours.
+The fix is a relay, or TURN, server. The Worker hands out relay credentials from
+`/api/turn`, and the app adds them to the connection automatically. The provider
+key stays on the server; students only ever get a credential, never the key.
 
-To turn it on, in the Cloudflare dashboard:
+### Recommended: Metered (free, no credit card)
 
-1. Go to **Realtime → TURN**, create a **TURN key**, and copy its **Key ID**.
-2. Create an **API token** with the *Calls Write* (and *Realtime*) permission.
-3. Add both to the Worker as secrets: **Settings → Variables and Secrets →
-   Add → Secret**, named `TURN_KEY_ID` and `TURN_API_TOKEN`.
+Metered's free plan includes 20 GB of relay traffic a month and asks only for an
+email address. It is the recommended option because Cloudflare's TURN service
+requires billing details on the account.
 
-(If you have a terminal, the same two are set with
-`npx wrangler secret put TURN_KEY_ID --config ../wrangler.toml` and the same for
-`TURN_API_TOKEN`, from inside `worker/`.)
+1. Sign up at **metered.ca** → **Open Relay** and copy the **API key** from the
+   dashboard.
+2. Add it to the Worker as a secret: **Settings → Variables and Secrets →
+   Add → Secret**, named `TURN_API_KEY`.
 
-While those are unset, `/api/turn` answers `{"configured":false}` and the app
+Nothing else is needed; the Worker calls Metered's credential endpoint itself.
+
+### Also supported
+
+The Worker checks these in order and uses the first that is configured:
+
+| Secret | Use it for |
+|---|---|
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | A fixed relay server: self-hosted coturn, or any provider that gives you a long-lived username and password. `TURN_URLS` is comma-separated. |
+| `TURN_API_KEY` | Metered, as above. |
+| `TURN_KEY_ID`, `TURN_API_TOKEN` | Cloudflare Calls TURN (**Realtime → TURN**). Requires billing details. |
+
+While none are set, `/api/turn` answers `{"configured":false}` and the app
 quietly falls back to the public PeerJS cloud, which is fine on an open network.
-Set both and reload the Topping to switch it on. To check from a browser, open
-`https://hilltoppers-study.amos-donn.workers.dev/api/turn` — with the secrets in
-place you should see a list of `iceServers` instead of an empty one.
+Configure one and reload the Topping to switch it on. To check from a browser,
+open `https://hilltoppers-study.amos-donn.workers.dev/api/turn` — you should see
+a list of `iceServers` containing a `turn:` entry, not an empty one.
+
+(With a terminal, secrets are set with
+`npx wrangler secret put TURN_API_KEY --config ../wrangler.toml`, from
+`worker/`.)
 
 ## Deploy
 

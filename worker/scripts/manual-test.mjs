@@ -86,7 +86,11 @@ try {
   if (turn.status !== 200) {
     check('relay credentials endpoint responds', false, `status ${turn.status}`);
   } else if (servers.length) {
+    // STUN alone cannot cross a school firewall, so insist on a relay entry.
+    const hasTurn = JSON.stringify(servers).includes('"turn:') ||
+      JSON.stringify(servers).includes('"turns:');
     check('relay (TURN) is configured', true, `${servers.length} ice server group(s)`);
+    check('relay includes a TURN url, not just STUN', hasTurn);
   } else {
     console.log('NOTE  relay (TURN) is not configured — fine on an open network,');
     console.log('      but screen sharing will fail on a network that blocks peer-to-peer.');

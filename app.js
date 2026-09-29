@@ -186,25 +186,49 @@
   // two need different wording, and only the watcher should log to the chat.
   function wireCall(call, outgoing) {
     state.call = call;
-    let sawStream = false;
-    call.on('stream', (stream) => { sawStream = true; state.remoteStream = stream; renderVideo(); });
+    let connected = false;
+    // The caller never receives its own stream back, so it has to judge success
+    // from the peer connection itself. Waiting for 'stream' here would time out
+    // on a share that is working perfectly.
+    call.on('stream', (stream) => {
+      connected = true;
+      state.remoteStream = stream;
+      renderVideo();
+    });
+    const markConnected = () => {
+      // A media path that is already up succeeds on the spot, however late we look.
+      if (call.peerConnection?.connectionState === 'connected') connected = true;
+    };
     call.on('close', () => {
+      markConnected();
       // A stop we asked for is not a failure, so stay quiet about it.
       const stopped = state.stoppingShare;
       clearRemote();
       if (stopped) return;
-      if (outgoing) $('share-status').textContent = 'The screen connection could not be made.';
-      else if (sawStream) system('Your classmate stopped sharing.');
+      if (outgoing) {
+        $('share-status').textContent = connected
+          ? 'Your classmate stopped watching.'
+          : 'The screen connection could not be made.';
+      } else if (connected) {
+        system('Your classmate stopped sharing.');
+      }
     });
     call.on('error', () => {
+      markConnected();
       clearRemote();
-      if (outgoing) $('share-status').textContent = 'The screen connection could not be made.';
-      else system('The screen connection could not be made.');
+      if (outgoing) {
+        $('share-status').textContent = connected
+          ? 'Your classmate stopped watching.'
+          : 'The screen connection could not be made.';
+      } else {
+        system('The screen connection could not be made.');
+      }
     });
-    // A call that never opens and never errors would otherwise hang silently.
+    // A call that never opens at all would otherwise hang silently.
     if (outgoing) {
       setTimeout(() => {
-        if (state.call === call && !sawStream) {
+        if (state.call === call) markConnected();
+        if (state.call === call && !connected) {
           $('share-status').textContent = 'The screen connection could not be made.';
         }
       }, 20000);
@@ -224,6 +248,8 @@
     const video = $('video');
     if (video.srcObject !== stream) video.srcObject = stream || null;
     $('video-wrap').hidden = !stream;
+    // Only offer fullscreen where the embed actually allows it.
+    $('video-full').hidden = !stream || !document.fullscreenEnabled;
     if (!stream) return;
     $('video-label').textContent = state.remoteStream ? "Classmate's screen" : 'Your screen';
     // A paused element paints black: the stream is there, but nothing renders it.
@@ -435,6 +461,21 @@
   $('consent-cancel').onclick = () => { $('consent').hidden = true; };
   $('consent-ok').onclick = () => { state.consentGiven = true; $('consent').hidden = true; startShare(); };
   $('stop-share').onclick = stopShare;
+  $('video-full').onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await $('video-wrap').requestFullscreen();
+    } catch {
+      // A sandboxed embed can refuse fullscreen; the browser shows nothing, so
+      // say so instead of leaving the button looking broken.
+      $('share-status').textContent = 'Fullscreen is blocked here. Ask to have it enabled.';
+    }
+  };
+  // Keep the label in step with the browser's fullscreen state, which a student
+  // can also leave with Esc.
+  document.addEventListener('fullscreenchange', () => {
+    $('video-full').textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+  });
   $('warning-ok').onclick = () => { $('warning').hidden = true; writeStore(WARNED_KEY, '1'); };
 
   // -- Boot --------------------------------------------------------------

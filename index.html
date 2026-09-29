@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main data-topping-content class="app">
+  <main data-topping-content class="app" id="app">
 
     <header class="topbar">
       <h1 class="app-title">StudyStream</h1>
@@ -65,7 +65,8 @@
       <div class="video-wrap" id="video-wrap" hidden>
         <video id="video" playsinline muted autoplay></video>
         <span class="video-label" id="video-label"></span>
-        <button class="video-full" id="video-full" type="button" hidden>Fullscreen</button>
+        <p class="video-message" id="video-message" hidden>Sharing tab</p>
+        <button class="video-full" id="video-full" type="button" hidden>Fill tab</button>
       </div>
 
       <div class="row controls">
@@ -81,6 +82,16 @@
         <input id="chat-input" maxlength="4000" autocomplete="off" placeholder="Message…">
         <button class="primary" id="send" type="submit">Send</button>
       </form>
+
+      <!-- Floating chat over the filled picture: holds the same #messages and
+           #chat-form nodes, moved in while filling so there is one conversation. -->
+      <div class="chat-float" id="chat-float" hidden>
+        <button class="chat-float-bar" id="chat-float-toggle" type="button" aria-expanded="true">
+          <span>Chat</span>
+          <span class="chev" id="chat-float-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="chat-float-body" id="chat-float-body"></div>
+      </div>
 
       <button class="ghost danger" id="end" type="button">Leave session</button>
     </section>

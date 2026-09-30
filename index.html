@@ -36,33 +36,61 @@
       </div>
     </section>
 
-    <!-- Home: your code, or invite a classmate by theirs. -->
+    <!-- Sign in with the same email and password used in Hilltoppers. -->
+    <section class="view" id="view-signin" hidden>
+      <div class="card">
+        <h2 class="card-title">Sign in with Hilltoppers</h2>
+        <p class="note">Use your school email and the same password as the Hilltoppers extension. There is nothing new to sign up for.</p>
+        <form id="signin-form" class="stack" autocomplete="on">
+          <label class="field-label" for="signin-email">School email</label>
+          <input id="signin-email" name="email" type="email" autocomplete="username" autocapitalize="none"
+                 spellcheck="false" required placeholder="firstname.lastname@student.stjacademy.org">
+          <label class="field-label" for="signin-password">Password</label>
+          <input id="signin-password" name="password" type="password" autocomplete="current-password" required>
+          <button class="primary" id="signin-submit" type="submit">Sign in</button>
+        </form>
+        <p class="note">Forgot your password? <button class="link" id="forgot" type="button">Reset it in Hilltoppers</button></p>
+        <p class="error" id="signin-error" role="alert" hidden></p>
+        <p class="note" id="signin-forgot" hidden>Open the Hilltoppers extension, go to Account, and choose "Forgot password?" to reset it there. Study uses the same password, so once it is changed in Hilltoppers it works here too.</p>
+      </div>
+    </section>
+
+    <!-- Home: who is free to study, and invite a classmate by email. -->
     <section class="view" id="view-home" hidden>
-      <div class="card code-card">
-        <p class="field-label">Your code</p>
-        <strong class="code" id="my-code" aria-live="polite">······</strong>
-        <div class="row">
-          <button class="ghost" id="copy-code" type="button">Copy</button>
-          <button class="ghost" id="share-code" type="button">Share</button>
-        </div>
-        <p class="note">Give this code to a classmate, or enter theirs below.</p>
+      <div class="card">
+        <p class="field-label">Signed in as</p>
+        <strong class="student-name" id="my-name">…</strong>
+        <p class="note" id="my-context">Checking the schedule…</p>
       </div>
 
-      <form id="join-form" class="join" autocomplete="off">
-        <label class="sr-only" for="join-code">Classmate's code</label>
-        <input id="join-code" class="code-input" inputmode="text" maxlength="6"
-               placeholder="Their code" aria-label="Classmate's code">
-        <button class="primary" id="join-button" type="submit">Study together</button>
+      <div class="card">
+        <p class="field-label">Your study hall</p>
+        <div class="blocks" id="block-picker" role="group" aria-label="Blocks that are your study hall"></div>
+        <p class="note" id="blocks-note">Tick the blocks you have study hall. Your name shows to classmates during those blocks.</p>
+      </div>
+
+      <div class="card">
+        <p class="field-label" id="list-label">Free to study now</p>
+        <div class="students" id="student-list"></div>
+        <p class="note" id="list-note">No one has marked a study hall yet.</p>
+      </div>
+
+      <form id="invite-form" class="join" autocomplete="off">
+        <label class="sr-only" for="invite-email">Classmate's school email</label>
+        <input id="invite-email" class="code-input email-input" inputmode="email" autocapitalize="none"
+               spellcheck="false" placeholder="Their school email" aria-label="Classmate's school email">
+        <button class="primary" id="invite-button" type="submit">Study together</button>
       </form>
 
       <p class="error" id="home-error" role="alert" hidden></p>
+      <button class="ghost" id="sign-out" type="button">Sign out</button>
     </section>
 
     <!-- Waiting: invite sent, or waiting for a classmate to accept ours. -->
     <section class="view" id="view-waiting" hidden>
       <div class="card">
         <h2 class="card-title" id="waiting-heading">Waiting for a classmate</h2>
-        <strong class="code" id="waiting-code" aria-live="polite"></strong>
+        <strong class="code" id="waiting-name" aria-live="polite"></strong>
         <p class="note" id="waiting-note"></p>
         <div class="row end" id="accept-slot"></div>
         <button class="ghost" id="cancel-wait" type="button">Cancel</button>
@@ -126,7 +154,8 @@
     <div class="overlay" id="warning" hidden>
       <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="warning-title">
         <h2 class="card-title" id="warning-title">How Hilltoppers Study works</h2>
-        <p class="note">Chat and screen sharing go straight between you and your classmate. The server only matches your codes and never sees your messages or your screen.</p>
+        <p class="note">Sign in with your school email and the same password as the Hilltoppers extension. Tick the blocks you have study hall; your name then shows to classmates who want to study.</p>
+        <p class="note">Chat and screen sharing go straight between you and your classmate. The server only matches you up and never sees your messages or your screen.</p>
         <p class="note">Screen sharing needs permission in the Hilltoppers popup. If the Share button does nothing, ask to have it enabled.</p>
         <div class="row end">
           <button class="primary" id="warning-ok" type="button">Got it</button>

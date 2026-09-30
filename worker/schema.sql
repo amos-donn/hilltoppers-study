@@ -6,7 +6,20 @@
 --
 -- To apply it by hand (optional), from the worker/ folder:
 --   npx wrangler d1 execute studystream-sessions --config ../wrangler.toml --remote --file=schema.sql
--- All statements are idempotent, so re-applying after an update is safe.
+-- Every statement here is `IF NOT EXISTS`, so re-applying is safe.
+--
+-- The one-time cleanup of the prototype's old `users`/`sessions` tables is done
+-- by the Worker, not here: it is guarded by the `schema:v2` marker row and runs
+-- at most once per database. A bare DROP in this file would wipe every live
+-- room each time someone re-ran it.
+
+-- Bounded operational counters so a public deploy has some abuse visibility
+-- without ever storing message content. It also carries the schema version
+-- marker used by the Worker's one-time migration.
+CREATE TABLE IF NOT EXISTS counters (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
+);
 
 -- One student, keyed by the school email they signed in with. The Firebase uid
 -- is the primary key; the email is the account name a classmate types. No
@@ -43,10 +56,3 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_uid);
 CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid);
-
--- Bounded operational counters so a public deploy has some abuse visibility
--- without ever storing message content.
-CREATE TABLE IF NOT EXISTS counters (
-  key TEXT PRIMARY KEY,
-  value INTEGER NOT NULL DEFAULT 0
-);

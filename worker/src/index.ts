@@ -48,15 +48,12 @@ const PEER_PREFIX = 'hilltoppers-study-';
 // Mirrors worker/schema.sql. The Worker creates its own tables on first use so
 // a deploy needs only the binding, not a `wrangler d1 execute` step. Every
 // statement is idempotent, so this is safe to repeat.
-//
-// The earlier prototype keyed accounts by a random id with a 6-character code
-// to share. Both are gone: the account is the school email now. The old tables
-// are dropped so a deploy on an existing database lands on the new shape
-// instead of keeping the dead columns. Sessions are short-lived, so nothing of
-// value is lost.
+const COUNTERS_TABLE = `CREATE TABLE IF NOT EXISTS counters (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
+)`;
+
 const SCHEMA_STATEMENTS = [
-  'DROP TABLE IF EXISTS sessions',
-  'DROP TABLE IF EXISTS users',
   `CREATE TABLE IF NOT EXISTS students (
     uid TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -78,25 +75,37 @@ const SCHEMA_STATEMENTS = [
     ended_by TEXT
   )`,
   'CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_uid)',
-  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid)',
-  `CREATE TABLE IF NOT EXISTS counters (
-    key TEXT PRIMARY KEY,
-    value INTEGER NOT NULL DEFAULT 0
-  )`
+  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid)'
 ];
+
+// One-time cleanup of the prototype's tables. The old shape keyed accounts by a
+// random id with a 6-character code; the account is the school email now.
+//
+// This runs at most once per database, guarded by a marker row, because D1
+// spins up new isolates constantly and a bare `DROP TABLE IF EXISTS sessions`
+// would delete every live room on each cold start. A version marker makes it a
+// migration instead of a routine. It runs before the tables are created, so a
+// fresh database is not dropped right after being built.
+const MIGRATION_KEY = 'schema:v2';
 
 let schemaReady: Promise<void> | null = null;
 
 // Runs once per isolate; a failure clears the cache so the next request retries.
-function ensureSchema(db: D1Database): Promise<void> {
-  if (!schemaReady) {
-    schemaReady = db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
-      .then(() => undefined)
-      .catch((error) => {
-        schemaReady = null;
-        throw error;
-      });
-  }
+async function ensureSchema(db: D1Database): Promise<void> {
+  if (schemaReady) return schemaReady;
+  schemaReady = (async () => {
+    // The marker lives in counters, so that table has to exist first.
+    await db.prepare(COUNTERS_TABLE).run();
+    const applied = await db.prepare('SELECT value FROM counters WHERE key = ?').bind(MIGRATION_KEY).first();
+    if (!applied) {
+      await db.batch(['DROP TABLE IF EXISTS users', 'DROP TABLE IF EXISTS sessions'].map((sql) => db.prepare(sql)));
+      await db.prepare('INSERT INTO counters (key, value) VALUES (?, ?)').bind(MIGRATION_KEY, 1).run();
+    }
+    await db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)));
+  })().catch((error) => {
+    schemaReady = null;
+    throw error;
+  });
   return schemaReady;
 }
 

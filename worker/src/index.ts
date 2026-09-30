@@ -1,9 +1,16 @@
-// Hilltoppers Study Worker: authenticates students, owns lookup codes, and keeps the
-// small session registry that lets two classmates find each other. PeerJS
-// carries the WebRTC handshake; chat and screen media never pass through here.
+// Hilltoppers Study Worker: signs students in with their Hilltoppers account,
+// keeps who is free to study, and owns the small session registry that lets two
+// classmates find each other. PeerJS carries the WebRTC handshake; chat and
+// screen media never pass through here.
+//
+// Study keeps no passwords and sends no email. A student signs in against the
+// Hilltoppers Firebase project in the browser; this Worker only verifies the
+// resulting token (see firebase.ts) and never sees a credential.
 import {
   hmacHex, json, nowSeconds, randomId, readJson, requireSigningKey, sha256Hex, timingSafeEqual
 } from './http';
+import { isStudentEmail, nameFromEmail, verifyFirebaseToken } from './firebase';
+import { availability, blockAt, loadDaySchedule, STUDY_BLOCK_LETTERS } from './schedule';
 
 export interface Env {
   DB_BINDING: D1Database;
@@ -35,43 +42,34 @@ export interface Env {
 const SESSION_TTL = 2 * 60 * 60;
 const IDLE_ACCOUNT_TTL = 6 * 60 * 60;
 const MAX_OPEN_SESSIONS = 3;
-const CODE_LENGTH = 6;
-const HANDLE_LENGTH = 6;
 const TOKEN_TTL = 24 * 60 * 60;
-const SECRET_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
-// Ambiguous characters are omitted so codes and handles can be read aloud.
-const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-const PEER_PREFIX = 'studystream-';
-
-function randomCode(length: number): string {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((byte) => ALPHABET[byte % ALPHABET.length]).join('');
-}
-
-function normalizeCode(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
+const PEER_PREFIX = 'hilltoppers-study-';
 
 // Mirrors worker/schema.sql. The Worker creates its own tables on first use so
 // a deploy needs only the binding, not a `wrangler d1 execute` step. Every
 // statement is idempotent, so this is safe to repeat.
+//
+// The earlier prototype keyed accounts by a random id with a 6-character code
+// to share. Both are gone: the account is the school email now. The old tables
+// are dropped so a deploy on an existing database lands on the new shape
+// instead of keeping the dead columns. Sessions are short-lived, so nothing of
+// value is lost.
 const SCHEMA_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS users (
-    account_id TEXT PRIMARY KEY,
-    handle TEXT NOT NULL UNIQUE,
-    secret_salt TEXT NOT NULL,
-    secret_hash TEXT NOT NULL,
-    display_name TEXT NOT NULL DEFAULT '',
+  'DROP TABLE IF EXISTS sessions',
+  'DROP TABLE IF EXISTS users',
+  `CREATE TABLE IF NOT EXISTS students (
+    uid TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    study_blocks TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     last_seen INTEGER NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    code TEXT NOT NULL UNIQUE,
-    host_account TEXT NOT NULL REFERENCES users(account_id) ON DELETE CASCADE,
+    host_uid TEXT NOT NULL REFERENCES students(uid) ON DELETE CASCADE,
     host_peer TEXT,
-    guest_account TEXT REFERENCES users(account_id) ON DELETE SET NULL,
+    guest_uid TEXT REFERENCES students(uid) ON DELETE SET NULL,
     guest_peer TEXT,
     guest_accepted INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
@@ -79,9 +77,8 @@ const SCHEMA_STATEMENTS = [
     ended_at INTEGER,
     ended_by TEXT
   )`,
-  'CREATE INDEX IF NOT EXISTS idx_sessions_code ON sessions(code)',
-  'CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_account)',
-  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_account)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_uid)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid)',
   `CREATE TABLE IF NOT EXISTS counters (
     key TEXT PRIMARY KEY,
     value INTEGER NOT NULL DEFAULT 0
@@ -194,52 +191,77 @@ function fixedIceServers(env: Env): unknown[] {
   return [server];
 }
 
+interface StudentRow {
+  uid: string; email: string; name: string; study_blocks: string;
+  created_at: number; last_seen: number;
+}
+
 interface SessionRow {
-  id: string; code: string; host_account: string; host_peer: string | null;
-  guest_account: string | null; guest_peer: string | null; guest_accepted: number;
+  id: string; host_uid: string; host_peer: string | null;
+  guest_uid: string | null; guest_peer: string | null; guest_accepted: number;
   created_at: number; expires_at: number; ended_at: number | null; ended_by: string | null;
 }
 
-async function tokenFor(accountId: string, key: string): Promise<string> {
+function studyBlocksOf(row: { study_blocks: string }): string[] {
+  return row.study_blocks ? row.study_blocks.split(',').filter(Boolean) : [];
+}
+
+// The PeerJS identity is derived from the account, not chosen by the client, so
+// a student cannot claim to be someone else's peer. It is a hash, so the
+// Firebase uid is not exposed on the signalling network.
+async function peerIdOf(uid: string): Promise<string> {
+  return PEER_PREFIX + (await sha256Hex('peer:' + uid)).slice(0, 24);
+}
+
+async function tokenFor(uid: string, key: string): Promise<string> {
   const expires = nowSeconds() + TOKEN_TTL;
-  const body = `${accountId}.${expires}`;
+  const body = `${uid}.${expires}`;
   return `${body}.${await hmacHex(key, body)}`;
 }
 
 async function verifyToken(request: Request, key: string): Promise<string | null> {
   const header = request.headers.get('Authorization') ?? '';
   if (!header.startsWith('Bearer ')) return null;
-  const [accountId, expires, signature] = header.slice(7).split('.');
-  if (!accountId || !expires || !signature) return null;
+  const [uid, expires, signature] = header.slice(7).split('.');
+  if (!uid || !expires || !signature) return null;
   const expiry = Number(expires);
   if (!Number.isFinite(expiry) || expiry <= nowSeconds()) return null;
-  const expected = await hmacHex(key, `${accountId}.${expires}`);
-  return timingSafeEqual(expected, signature) ? accountId : null;
+  const expected = await hmacHex(key, `${uid}.${expires}`);
+  return timingSafeEqual(expected, signature) ? uid : null;
 }
 
-async function activeSession(db: D1Database, accountId: string, now: number): Promise<SessionRow | null> {
+async function activeSession(db: D1Database, uid: string, now: number): Promise<SessionRow | null> {
   const row = await db.prepare(
     `SELECT * FROM sessions
-      WHERE ended_at IS NULL AND expires_at > ? AND (host_account = ? OR guest_account = ?)
+      WHERE ended_at IS NULL AND expires_at > ? AND (host_uid = ? OR guest_uid = ?)
       ORDER BY created_at DESC LIMIT 1`
-  ).bind(now, accountId, accountId).first<SessionRow>();
+  ).bind(now, uid, uid).first<SessionRow>();
   return row ?? null;
 }
 
-function sessionView(row: SessionRow, accountId: string) {
-  const isHost = row.host_account === accountId;
+function sessionView(row: SessionRow, uid: string) {
+  const isHost = row.host_uid === uid;
   const accepted = row.guest_accepted === 1;
-  const other = isHost ? row.guest_account : row.host_account;
   return {
     id: row.id,
-    code: row.code,
     role: isHost ? 'host' : 'guest',
     // The host waits while an invited guest has not accepted; the guest is
     // "invited" until they accept. Both connect only once ready.
-    state: !row.guest_account ? 'waiting' : accepted ? 'ready' : isHost ? 'waiting' : 'invited',
-    peer: other ? PEER_PREFIX + other : null,
+    state: !row.guest_uid ? 'waiting' : accepted ? 'ready' : isHost ? 'waiting' : 'invited',
+    peer: isHost ? row.guest_peer : row.host_peer,
     expiresAt: row.expires_at
   };
+}
+
+// The session view plus the other student's name, so the waiting screen can say
+// who is being waited on instead of showing a code.
+async function sessionPayload(db: D1Database, row: SessionRow, uid: string) {
+  const view = sessionView(row, uid);
+  const other = row.host_uid === uid ? row.guest_uid : row.host_uid;
+  const student = other
+    ? await db.prepare('SELECT name FROM students WHERE uid = ?').bind(other).first<{ name: string }>()
+    : null;
+  return { ...view, withName: student?.name ?? '' };
 }
 
 async function bump(db: D1Database, key: string): Promise<void> {
@@ -253,30 +275,28 @@ async function findOrCreateSession(db: D1Database, me: string, peer: string, now
   const [low, high] = [me, peer].sort();
   const existing = await activeSession(db, me, now);
   if (existing) {
-    const pair = [existing.host_account, existing.guest_account].filter(Boolean).sort();
-    if (pair.length === 2 && pair[0] === low && pair[1] === high) return json(sessionView(existing, me), 200);
+    const pair = [existing.host_uid, existing.guest_uid].filter(Boolean).sort();
+    if (pair.length === 2 && pair[0] === low && pair[1] === high) return json(await sessionPayload(db, existing, me), 200);
     return json({ error: 'Finish your current session first.' }, 409);
   }
   const open = await db.prepare(
-    'SELECT COUNT(*) AS n FROM sessions WHERE host_account = ? AND ended_at IS NULL AND expires_at > ?'
+    'SELECT COUNT(*) AS n FROM sessions WHERE host_uid = ? AND ended_at IS NULL AND expires_at > ?'
   ).bind(me, now).first<{ n: number }>();
   if ((open?.n ?? 0) >= MAX_OPEN_SESSIONS) return json({ error: 'Close an open room first.' }, 429);
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const id = randomId(12);
-    const code = randomCode(CODE_LENGTH);
-    try {
-      await db.prepare(
-        `INSERT INTO sessions (id, code, host_account, host_peer, guest_account, guest_peer, guest_accepted, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
-      ).bind(id, code, me, PEER_PREFIX + me, peer, PEER_PREFIX + peer, now, now + SESSION_TTL).run();
-      await bump(db, 'sessions');
-      return json({ id, code, role: 'host', state: 'waiting', peer: PEER_PREFIX + peer, expiresAt: now + SESSION_TTL }, 201);
-    } catch {
-      // A colliding code is retried with a fresh one.
-    }
-  }
-  return json({ error: 'Could not open a room. Try again.' }, 500);
+  const myPeer = await peerIdOf(me);
+  const theirPeer = await peerIdOf(peer);
+  const id = randomId(12);
+  await db.prepare(
+    `INSERT INTO sessions (id, host_uid, host_peer, guest_uid, guest_peer, guest_accepted, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
+  ).bind(id, me, myPeer, peer, theirPeer, now, now + SESSION_TTL).run();
+  await bump(db, 'sessions');
+  const row: SessionRow = {
+    id, host_uid: me, host_peer: myPeer, guest_uid: peer, guest_peer: theirPeer,
+    guest_accepted: 0, created_at: now, expires_at: now + SESSION_TTL, ended_at: null, ended_by: null
+  };
+  return json(await sessionPayload(db, row, me), 201);
 }
 
 // Returns the matching CORS origin, or null when the request comes from no
@@ -313,6 +333,27 @@ function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   });
 }
 
+// The signed-in student's own view of themselves.
+async function profileView(db: D1Database, uid: string) {
+  const student = await db.prepare(
+    'SELECT uid, email, name, study_blocks FROM students WHERE uid = ?'
+  ).bind(uid).first<StudentRow>();
+  if (!student) return null;
+  const now = new Date();
+  const schedule = await loadDaySchedule(now);
+  const blocks = studyBlocksOf(student);
+  const current = blockAt(schedule, now);
+  return {
+    email: student.email,
+    name: student.name,
+    studyBlocks: blocks,
+    peerId: await peerIdOf(uid),
+    dayType: schedule.dayType,
+    block: current ? { letter: current.letter, name: current.name, start: current.start, end: current.end } : null,
+    availability: availability(schedule, blocks, now)
+  };
+}
+
 async function apiResponse(request: Request, env: Env, url: URL): Promise<Response> {
   const key = requireSigningKey(env);
   if (!key) return json({ error: 'Hilltoppers Study is not configured yet.' }, 503);
@@ -324,7 +365,7 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
   if (path === '/setup') {
     try {
       await ensureSchema(db);
-      return json({ ok: true, service: 'studystream', tables: 'ready' }, 200);
+      return json({ ok: true, service: 'hilltoppers-study', tables: 'ready' }, 200);
     } catch (error) {
       return json({ error: 'Could not set up the database.', detail: String(error) }, 500);
     }
@@ -332,92 +373,123 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
 
   await ensureSchema(db);
 
-  if (path === '/health') return json({ ok: true, configured: true, service: 'studystream' }, 200);
+  if (path === '/health') return json({ ok: true, configured: true, service: 'hilltoppers-study' }, 200);
 
   // Relay credentials for the WebRTC handshake. No account needed: this is
   // called before sign-in so a slow network is fixed before a room opens.
   if (path === '/turn') return turnCredentials(env);
 
-  // Create an account, or sign back into one from a stored secret.
-  if (path === '/register' && request.method === 'POST') {
+  // "Sign In with Hilltoppers". The browser already signed in against the
+  // school's Firebase project; this verifies that token and creates or updates
+  // the matching Study student. No password is sent or stored here.
+  if (path === '/auth' && request.method === 'POST') {
     const body = await readJson(request);
-    const accountId = typeof body?.accountId === 'string' ? body.accountId : '';
-    const secret = typeof body?.secret === 'string' ? body.secret : '';
+    const idToken = typeof body?.idToken === 'string' ? body.idToken : '';
+    if (!idToken) return json({ error: 'Sign in again.' }, 400);
 
-    if (accountId && secret) {
-      if (!SECRET_PATTERN.test(secret)) return json({ error: 'Sign in again.' }, 401);
-      const user = await db.prepare(
-        'SELECT secret_salt AS salt, secret_hash AS hash, handle FROM users WHERE account_id = ?'
-      ).bind(accountId).first<{ salt: string; hash: string; handle: string }>();
-      if (!user || !timingSafeEqual(await sha256Hex(`${user.salt}:${secret}`), user.hash)) {
-        return json({ error: 'Sign in again.' }, 401);
-      }
-      await db.prepare('UPDATE users SET last_seen = ? WHERE account_id = ?').bind(now, accountId).run();
-      return json({
-        accountId, handle: user.handle, peerId: PEER_PREFIX + accountId, token: await tokenFor(accountId, key)
-      }, 200);
+    let account;
+    try {
+      account = await verifyFirebaseToken(idToken);
+    } catch {
+      return json({ error: 'Could not check your sign-in. Try again.' }, 502);
+    }
+    if (!account) return json({ error: 'Sign in again.' }, 401);
+    if (!isStudentEmail(account.email)) {
+      return json({ error: 'Sign in with your @student.stjacademy.org school account.' }, 403);
     }
 
-    const newSecret = randomId(24);
-    const salt = randomId(12);
-    const hash = await sha256Hex(`${salt}:${newSecret}`);
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const id = randomId(12);
-      try {
-        await db.prepare(
-          `INSERT INTO users (account_id, handle, secret_salt, secret_hash, created_at, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(id, randomCode(HANDLE_LENGTH), salt, hash, now, now).run();
-        await bump(db, 'registers');
-        const user = await db.prepare('SELECT handle FROM users WHERE account_id = ?').bind(id)
-          .first<{ handle: string }>();
-        if (!user) continue;
-        return json({
-          accountId: id, handle: user.handle, secret: newSecret, peerId: PEER_PREFIX + id,
-          token: await tokenFor(id, key)
-        }, 201);
-      } catch {
-        // A colliding handle is retried with a fresh one.
-      }
-    }
-    return json({ error: 'Could not create an account. Try again.' }, 500);
+    const name = nameFromEmail(account.email);
+    // The email is the account, so a returning student updates the row they
+    // already have rather than getting a second one. The conflict is keyed on
+    // email, not uid, because a recreated Firebase account keeps its email but
+    // gets a new uid. A student who already picked study-hall blocks keeps them.
+    await db.prepare(
+      `INSERT INTO students (uid, email, name, study_blocks, created_at, last_seen)
+       VALUES (?, ?, ?, '', ?, ?)
+       ON CONFLICT(email) DO UPDATE SET uid = excluded.uid, name = excluded.name, last_seen = excluded.last_seen`
+    ).bind(account.uid, account.email, name, now, now).run();
+
+    const profile = await profileView(db, account.uid);
+    return json({ token: await tokenFor(account.uid, key), ...profile }, 200);
   }
 
   // Everything past this point needs a signed-in account.
   const me = await verifyToken(request, key);
   if (!me) return json({ error: 'Sign in again.' }, 401);
-  await db.prepare('UPDATE users SET last_seen = ? WHERE account_id = ?').bind(now, me).run();
+  const student = await db.prepare('SELECT * FROM students WHERE uid = ?').bind(me).first<StudentRow>();
+  if (!student) return json({ error: 'Sign in again.' }, 401);
+  await db.prepare('UPDATE students SET last_seen = ? WHERE uid = ?').bind(now, me).run();
 
-  if (path === '/account' && request.method === 'GET') {
-    const user = await db.prepare('SELECT handle, display_name AS displayName FROM users WHERE account_id = ?')
-      .bind(me).first<{ handle: string; displayName: string }>();
-    if (!user) return json({ error: 'Sign in again.' }, 401);
-    return json({ ...user, peerId: PEER_PREFIX + me }, 200);
+  if (path === '/profile' && request.method === 'GET') {
+    return json(await profileView(db, me), 200);
   }
 
-  // Resolve a classmate's lookup code to the peer to invite.
-  if (path === '/lookup' && request.method === 'GET') {
+  // Which blocks are this student's study hall. Any of A-E and CP, more than
+  // one allowed.
+  if (path === '/profile' && request.method === 'POST') {
+    const body = await readJson(request);
+    const requested = Array.isArray(body?.blocks) ? body.blocks : [];
+    const blocks = STUDY_BLOCK_LETTERS.filter((letter) => requested.includes(letter));
+    await db.prepare('UPDATE students SET study_blocks = ? WHERE uid = ?').bind(blocks.join(','), me).run();
+    return json(await profileView(db, me), 200);
+  }
+
+  // Who is free to study right now. During a study-hall block this is the
+  // student's own block; after the last block the school day is over and
+  // everyone who has marked study halls is listed.
+  if (path === '/students' && request.method === 'GET') {
     const limit = await env.JOIN_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'local' });
     if (!limit.success) return json({ error: 'Too many lookups. Wait a minute.' }, 429);
-    const handle = normalizeCode(url.searchParams.get('handle') ?? '');
-    if (handle.length !== HANDLE_LENGTH) return json({ error: 'Enter a 6-character code.' }, 400);
-    const user = await db.prepare('SELECT account_id AS accountId FROM users WHERE handle = ?')
-      .bind(handle).first<{ accountId: string }>();
-    if (!user) return json({ error: 'No student with that code.' }, 404);
-    if (user.accountId === me) return json({ error: 'That is your own code.' }, 400);
-    return json({ handle, peerId: PEER_PREFIX + user.accountId }, 200);
+    const nowDate = new Date();
+    const schedule = await loadDaySchedule(nowDate);
+    const current = blockAt(schedule, nowDate);
+    const mode = schedule.blocks.length === 0
+      ? 'no-school'
+      : current ? 'during-school' : 'after-school';
+    const rows = await db.prepare(
+      "SELECT uid, email, name, study_blocks FROM students WHERE study_blocks != '' ORDER BY name"
+    ).all<StudentRow>();
+    const students = (rows.results ?? []).map((row) => {
+      const blocks = studyBlocksOf(row);
+      const state = availability(schedule, blocks, nowDate);
+      return {
+        name: row.name,
+        email: row.email,
+        blocks,
+        available: state === 'study-hall',
+        freeNow: mode !== 'during-school' && blocks.length > 0
+      };
+    });
+    return json({
+      dayType: schedule.dayType,
+      mode,
+      block: current ? { letter: current.letter, name: current.name, start: current.start, end: current.end } : null,
+      students
+    }, 200);
   }
 
-  // Create (or reuse) a room. Body: { handle } for either direction.
+  // Find a classmate by school email, so a session can be started at any time.
+  if (path === '/directory' && request.method === 'GET') {
+    const limit = await env.JOIN_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'local' });
+    if (!limit.success) return json({ error: 'Too many lookups. Wait a minute.' }, 429);
+    const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+    if (query.length < 3) return json({ error: 'Type at least three letters of an email or name.' }, 400);
+    const rows = await db.prepare(
+      'SELECT email, name FROM students WHERE email = ? OR lower(name) LIKE ? ORDER BY name LIMIT 20'
+    ).bind(query, query + '%').all<{ email: string; name: string }>();
+    return json({ results: rows.results ?? [] }, 200);
+  }
+
+  // Start (or reuse) a room with a classmate, by their school email.
   if (path === '/session' && request.method === 'POST') {
     const body = await readJson(request);
-    const handle = normalizeCode(typeof body?.handle === 'string' ? body.handle : '');
-    if (handle.length !== HANDLE_LENGTH) return json({ error: 'Enter a 6-character code.' }, 400);
-    const target = await db.prepare('SELECT account_id AS accountId FROM users WHERE handle = ?')
-      .bind(handle).first<{ accountId: string }>();
-    if (!target) return json({ error: 'No student with that code.' }, 404);
-    if (target.accountId === me) return json({ error: 'That is your own code.' }, 400);
-    return findOrCreateSession(db, me, target.accountId, now);
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!isStudentEmail(email)) return json({ error: 'Enter a school email like firstname.lastname@student.stjacademy.org.' }, 400);
+    if (email === student.email) return json({ error: 'That is your own email.' }, 400);
+    const target = await db.prepare('SELECT uid FROM students WHERE email = ?')
+      .bind(email).first<{ uid: string }>();
+    if (!target) return json({ error: 'No student with that email has signed in yet.' }, 404);
+    return findOrCreateSession(db, me, target.uid, now);
   }
 
   // The invited classmate accepts, which activates the room for both sides.
@@ -428,14 +500,14 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
       ? await db.prepare('SELECT * FROM sessions WHERE id = ? AND ended_at IS NULL AND expires_at > ? LIMIT 1')
         .bind(id, now).first<SessionRow>()
       : null;
-    if (!row || row.guest_account !== me) return json({ error: 'That invite is no longer available.' }, 404);
+    if (!row || row.guest_uid !== me) return json({ error: 'That invite is no longer available.' }, 404);
     await db.prepare('UPDATE sessions SET guest_accepted = 1 WHERE id = ?').bind(row.id).run();
-    return json(sessionView({ ...row, guest_accepted: 1 }, me), 200);
+    return json(await sessionPayload(db, { ...row, guest_accepted: 1 }, me), 200);
   }
 
   if (path === '/session' && request.method === 'GET') {
     const row = await activeSession(db, me, now);
-    return json(row ? sessionView(row, me) : { state: 'none' }, 200);
+    return json(row ? await sessionPayload(db, row, me) : { state: 'none' }, 200);
   }
 
   if (path === '/session/end' && request.method === 'POST') {
@@ -457,8 +529,8 @@ async function cleanup(env: Env): Promise<void> {
   await env.DB_BINDING.prepare(
     'DELETE FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?'
   ).bind(now - 24 * 60 * 60).run();
-  // Cascades remove the account's sessions.
-  await env.DB_BINDING.prepare('DELETE FROM users WHERE last_seen < ?').bind(now - IDLE_ACCOUNT_TTL).run();
+  // Cascades remove the student's sessions.
+  await env.DB_BINDING.prepare('DELETE FROM students WHERE last_seen < ?').bind(now - IDLE_ACCOUNT_TTL).run();
 }
 
 export default {

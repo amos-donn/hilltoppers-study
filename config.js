@@ -1,10 +1,26 @@
 /* Deployment settings for Hilltoppers Study.
  *
- * STUDYSTREAM_API is the base URL of the Worker that hands out lookup codes
- * and authorizes rooms. It is empty by default, which would make the app show
- * its offline screen. Set it before publishing:
+ * STUDYSTREAM_API is the base URL of the Worker that signs students in and
+ * authorizes rooms. It is empty by default, which would make the app show its
+ * offline screen. Set it before publishing:
  */
 window.STUDYSTREAM_API = 'https://hilltoppers-study.amos-donn.workers.dev';
+
+/* The Hilltoppers Firebase project. Study does not create accounts or store
+ * passwords: it signs in against the same project the Hilltoppers extension
+ * uses, so a student keeps the same email and password. These values identify
+ * the project publicly (Google publishes web config in page source) and are
+ * safe to commit; the Firebase project's own rules protect the data.
+ *
+ * The project id must match what the Worker verifies tokens against. */
+window.STUDYSTREAM_FIREBASE = {
+  apiKey: 'AIzaSyCPDKZHahJOA2WIJaOaYDYDcxFNAW2oUK0',
+  projectId: 'schedule-59d28'
+};
+
+/* Where a student resets a forgotten password. Study cannot change it, because
+ * the password belongs to the Hilltoppers account. */
+window.STUDYSTREAM_RESET_URL = 'https://hilltoppers.pages.dev/';
 
 /* Relay (TURN) servers for the WebRTC handshake.
  *

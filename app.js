@@ -1,37 +1,40 @@
 // Hilltoppers Study client for the Hilltoppers Topping Bar.
 // The Topping runs in a sandboxed iframe and reports its height back to the
-// extension through resize.js. Signing in, code lookup and room authorization
-// go through the Worker's /api routes. PeerJS carries the WebRTC handshake.
-// Chat is an RTCDataChannel and screen sharing uses getDisplayMedia; neither
-// ever passes through the Worker.
+// extension through resize.js. Signing in goes through the Hilltoppers Firebase
+// project; study-hall presence and room authorization go through the Worker's
+// /api routes. PeerJS carries the WebRTC handshake. Chat is an RTCDataChannel
+// and screen sharing uses getDisplayMedia; neither ever passes through the
+// Worker.
 //
 // The iframe is sandboxed without allow-modals, so window.confirm/alert do not
-// work here; the confirmations below are in-page overlays. localStorage is also
-// blocked in a sandboxed cross-origin frame, so every access is guarded.
+// work here; the confirmations below are in-page overlays.
 (() => {
   const Peer = window.Peer;
   const API_BASE = (window.STUDYSTREAM_API || '').replace(/\/+$/, '');
   const PEER_OPTIONS = window.STUDYSTREAM_PEER || {};
-  const HANDLE_LENGTH = 6;
+  const FIREBASE = window.STUDYSTREAM_FIREBASE || {};
+  const RESET_URL = window.STUDYSTREAM_RESET_URL || '';
+  const STUDENT_DOMAIN = 'student.stjacademy.org';
   const MAX_MESSAGE = 4000;
-  const STORE_KEY = 'studystream.account.v1';
-  const WARNED_KEY = 'studystream.warned';
+  const STORE_KEY = 'hilltoppers-study.account.v1';
+  const WARNED_KEY = 'hilltoppers-study.warned';
+  const BLOCKS = ['A', 'B', 'C', 'D', 'E', 'CP'];
 
   const $ = (id) => document.getElementById(id);
   const views = {
-    offline: $('view-offline'), home: $('view-home'),
+    offline: $('view-offline'), signin: $('view-signin'), home: $('view-home'),
     waiting: $('view-waiting'), session: $('view-session')
   };
   const statusDot = $('status-dot');
   const statusText = $('status-text');
   const homeError = $('home-error');
+  const signinError = $('signin-error');
 
   const state = {
-    token: null, handle: null, peerId: null, session: null,
-    peer: null, conn: null, pendingHandle: null,
+    token: null, profile: null, directory: null,
+    peer: null, conn: null, session: null,
     localStream: null, remoteStream: null, call: null, pollTimer: null,
-    consentGiven: false, stoppingShare: false,
-    filling: false
+    consentGiven: false, stoppingShare: false, filling: false
   };
 
   // localStorage throws in a sandboxed frame; never let that break the app.
@@ -43,19 +46,6 @@
   }
   function removeStore(key) {
     try { localStorage.removeItem(key); } catch { /* ignore */ }
-  }
-
-  // Mirrors the Worker's check. A turn:/turns: url with credentials is the only
-  // thing that gets through a network which blocks peer-to-peer; STUN alone
-  // cannot, so it is not worth trading the working defaults for.
-  function canRelay(iceServers) {
-    if (!Array.isArray(iceServers)) return false;
-    return iceServers.some((server) => {
-      if (!server || typeof server !== 'object') return false;
-      const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-      const hasTurn = urls.some((url) => typeof url === 'string' && /^turns?:/i.test(url.trim()));
-      return hasTurn && Boolean(server.username || server.credential);
-    });
   }
 
   function showView(name) {
@@ -95,27 +85,182 @@
 
   const system = (text) => addMessage(text, '', false);
 
-  // -- Account -----------------------------------------------------------
-  async function signIn() {
-    let saved = null;
-    try { saved = JSON.parse(readStore(STORE_KEY) || 'null'); } catch { saved = null; }
-    let created;
-    if (saved?.accountId && saved?.secret) {
-      try {
-        created = await api('/register', {
-          method: 'POST', body: JSON.stringify({ accountId: saved.accountId, secret: saved.secret })
-        });
-      } catch {
-        removeStore(STORE_KEY);
-        created = await api('/register', { method: 'POST', body: JSON.stringify({}) });
-      }
-    } else {
-      created = await api('/register', { method: 'POST', body: JSON.stringify({}) });
+  // -- Sign in with Hilltoppers ------------------------------------------
+  // The same Firebase project the extension signs in against, so a student
+  // keeps the same email and password. Study creates nothing and resets
+  // nothing; it only exchanges the password for a token.
+  function firebaseUrl(method) {
+    return `https://identitytoolkit.googleapis.com/v1/accounts:${method}?key=${encodeURIComponent(FIREBASE.apiKey || '')}`;
+  }
+
+  async function hilltoppersSignIn(email, password) {
+    const response = await fetch(firebaseUrl('signInWithPassword'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const code = data?.error?.message || '';
+      if (code === 'EMAIL_NOT_FOUND') throw new Error('No Hilltoppers account with that email.');
+      if (code === 'INVALID_LOGIN_CREDENTIALS' || code === 'INVALID_PASSWORD') throw new Error('Incorrect email or password.');
+      if (code === 'USER_DISABLED') throw new Error('That account is disabled.');
+      if (code === 'TOO_MANY_ATTEMPTS_TRY_LATER') throw new Error('Too many attempts. Try again in a few minutes.');
+      throw new Error('Could not sign in. Check the connection and try again.');
     }
-    if (created.secret) writeStore(STORE_KEY, JSON.stringify({ accountId: created.accountId, secret: created.secret }));
-    state.token = created.token;
-    state.handle = created.handle;
-    state.peerId = created.peerId;
+    return data.idToken;
+  }
+
+  function isStudentEmail(email) {
+    return new RegExp('^[^@\\s]+@' + STUDENT_DOMAIN.replace(/\./g, '\\.') + '$', 'i').test(email);
+  }
+
+  async function signInWithToken(idToken) {
+    const result = await api('/auth', { method: 'POST', body: JSON.stringify({ idToken }) });
+    state.token = result.token;
+    state.profile = result;
+    writeStore(STORE_KEY, JSON.stringify({ token: result.token }));
+  }
+
+  // -- Profile and study hall --------------------------------------------
+  function renderProfile() {
+    const profile = state.profile;
+    if (!profile) return;
+    $('my-name').textContent = profile.name;
+    $('my-context').textContent = contextLine(profile);
+    renderBlockPicker(profile.studyBlocks || []);
+    renderStudents();
+  }
+
+  function contextLine(profile) {
+    if (profile.block) {
+      const where = profile.studyBlocks?.includes(profile.block.letter) ? 'Study hall' : 'In class';
+      return `${profile.dayType} · ${profile.block.name} ${formatRange(profile.block)} · ${where}`;
+    }
+    if (profile.dayType === 'No School') return 'No school today.';
+    if (profile.availability === 'after-school') return `${profile.dayType} · After school.`;
+    return profile.dayType || '';
+  }
+
+  function formatRange(block) {
+    return `${formatTime(block.start)}-${formatTime(block.end)}`;
+  }
+
+  // Times arrive as 24-hour "HH:MM"; show them the way a student reads a
+  // schedule. Noon and midnight are the two that trip a naive conversion.
+  function formatTime(value) {
+    const [hour, minute] = String(value).split(':').map(Number);
+    const suffix = hour < 12 ? 'am' : 'pm';
+    const display = hour % 12 === 0 ? 12 : hour % 12;
+    return `${display}:${String(minute).padStart(2, '0')}${suffix}`;
+  }
+
+  function renderBlockPicker(selected) {
+    const picker = $('block-picker');
+    picker.replaceChildren();
+    for (const letter of BLOCKS) {
+      const label = document.createElement('label');
+      label.className = 'block';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = letter;
+      input.checked = selected.includes(letter);
+      input.onchange = saveBlocks;
+      const text = document.createElement('span');
+      text.textContent = letter;
+      label.append(input, text);
+      picker.append(label);
+    }
+  }
+
+  async function saveBlocks() {
+    const blocks = [...$('block-picker').querySelectorAll('input:checked')].map((input) => input.value);
+    try {
+      state.profile = await api('/profile', { method: 'POST', body: JSON.stringify({ blocks }) });
+      renderProfile();
+      $('blocks-note').textContent = blocks.length
+        ? 'Saved. Your name shows to classmates during ' + blocks.join(', ') + '.'
+        : 'Tick the blocks you have study hall. Your name shows to classmates during those blocks.';
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // -- Who is free to study ----------------------------------------------
+  function renderStudents() {
+    const data = state.directory;
+    const list = $('student-list');
+    const note = $('list-note');
+    list.replaceChildren();
+    if (!data) { note.hidden = false; note.textContent = 'Loading…'; return; }
+
+    const mine = state.profile?.email;
+    const others = (data.students || []).filter((student) => student.email !== mine);
+    const shown = data.mode === 'during-school'
+      ? others.filter((student) => student.available)
+      : others.filter((student) => student.freeNow);
+
+    if (data.mode === 'during-school') {
+      $('list-label').textContent = data.block
+        ? `Free in ${data.block.name}`
+        : 'Free to study now';
+      note.textContent = shown.length
+        ? 'Tap a name to ask them to study.'
+        : 'No one else is free in this block yet.';
+    } else if (data.mode === 'after-school') {
+      $('list-label').textContent = 'Free to study';
+      note.textContent = shown.length
+        ? 'School is out. Tap a name to study, or type an email below.'
+        : 'School is out. Type a classmate\'s email below to study.';
+    } else {
+      $('list-label').textContent = 'Free to study';
+      note.textContent = shown.length
+        ? 'No school today. Tap a name to study, or type an email below.'
+        : 'No school today. Type a classmate\'s email below to study.';
+    }
+    note.hidden = shown.length > 0;
+
+    for (const student of shown) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'student';
+      const name = document.createElement('span');
+      name.className = 'student-name';
+      name.textContent = student.name;
+      const where = document.createElement('span');
+      where.className = 'student-where';
+      where.textContent = data.mode === 'during-school'
+        ? student.blocks.join(', ')
+        : 'Study hall ' + student.blocks.join(', ');
+      row.append(name, where);
+      row.onclick = () => inviteByEmail(student.email, student.name);
+      list.append(row);
+    }
+  }
+
+  async function refreshDirectory() {
+    try {
+      state.directory = await api('/students');
+      renderStudents();
+    } catch { /* transient; the list keeps its last state */ }
+  }
+
+  // -- Invites -----------------------------------------------------------
+  async function inviteByEmail(email, name) {
+    showError('');
+    if (!isStudentEmail(email)) {
+      return showError('Use a school email like firstname.lastname@student.stjacademy.org.');
+    }
+    if (email === state.profile?.email) return showError('That is your own email.');
+    try {
+      state.session = await api('/session', { method: 'POST', body: JSON.stringify({ email }) });
+      if (!state.session.withName && name) state.session.withName = name;
+      renderSession();
+      startPolling();
+    } catch (error) {
+      showError(error.message);
+    }
   }
 
   // -- PeerJS ------------------------------------------------------------
@@ -136,11 +281,24 @@
     return base;
   }
 
+  // Mirrors the Worker's check. A turn:/turns: url with credentials is the only
+  // thing that gets through a network which blocks peer-to-peer; STUN alone
+  // cannot, so it is not worth trading the working defaults for.
+  function canRelay(iceServers) {
+    if (!Array.isArray(iceServers)) return false;
+    return iceServers.some((server) => {
+      if (!server || typeof server !== 'object') return false;
+      const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+      const hasTurn = urls.some((url) => typeof url === 'string' && /^turns?:/i.test(url.trim()));
+      return hasTurn && Boolean(server.username || server.credential);
+    });
+  }
+
   async function ensurePeer() {
     if (state.peer && !state.peer.destroyed) return state.peer;
     const options = await peerOptions();
     return new Promise((resolve, reject) => {
-      const peer = new Peer(state.peerId, options);
+      const peer = new Peer(state.profile.peerId, options);
       peer.on('open', () => { state.peer = peer; resolve(peer); });
       peer.on('error', (error) => {
         if (!state.peer) reject(error);
@@ -165,7 +323,7 @@
     if (!session?.peer) return;
     if (session.role === 'guest') {
       if (state.conn?.open) return;
-      wireConn(state.peer.connect(session.peer, { label: 'studystream-chat', reliable: true }));
+      wireConn(state.peer.connect(session.peer, { label: 'hilltoppers-study-chat', reliable: true }));
     }
     system('Connecting…');
   }
@@ -358,22 +516,18 @@
     if (session.state === 'waiting') {
       showView('waiting');
       $('accept-slot').replaceChildren();
-      if (state.pendingHandle) {
-        $('waiting-heading').textContent = 'Invite sent';
-        $('waiting-code').textContent = state.pendingHandle.split('').join(' ');
-        $('waiting-note').textContent = 'Waiting for your classmate to accept.';
-      } else {
-        $('waiting-heading').textContent = 'Waiting for a classmate';
-        $('waiting-code').textContent = (state.handle || '').split('').join(' ');
-        $('waiting-note').textContent = 'Share your code, or wait for the classmate you invited to accept.';
-      }
+      $('waiting-heading').textContent = 'Waiting for a classmate';
+      $('waiting-name').textContent = session.withName || '';
+      $('waiting-note').textContent = session.withName
+        ? `Waiting for ${session.withName} to accept.`
+        : 'Waiting for your classmate to accept.';
       setStatus('waiting', 'Waiting for classmate');
       return;
     }
     if (session.state === 'invited') {
       showView('waiting');
       $('waiting-heading').textContent = 'Study invite';
-      $('waiting-code').textContent = 'Someone wants to study';
+      $('waiting-name').textContent = session.withName || 'A classmate';
       $('waiting-note').textContent = 'Accept to start your session.';
       $('accept-slot').replaceChildren(makeAcceptButton(session));
       setStatus('waiting', 'Invite pending');
@@ -421,7 +575,6 @@
   async function leave() {
     state.session = null;
     state.conn = null;
-    state.pendingHandle = null;
     stopPolling();
     stopShare();
     state.filling = false;
@@ -432,46 +585,62 @@
     $('messages').replaceChildren();
     showView('home');
     setStatus('online', 'Ready');
+    refreshDirectory();
   }
 
   async function renderHome() {
-    $('my-code').textContent = (state.handle || '······').split('').join(' ');
+    renderProfile();
     showView('home');
-    // Watch for an invite even before we start one, so a classmate who enters
-    // our code can pull us into a session.
+    // Watch for an invite even before we start one, so a classmate who asks us
+    // can pull us into a session.
     startPolling();
+    refreshDirectory();
   }
 
   // -- Events ------------------------------------------------------------
   $('retry').addEventListener('click', boot);
 
-  $('copy-code').onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(state.handle || '');
-      $('copy-code').textContent = 'Copied';
-      setTimeout(() => { $('copy-code').textContent = 'Copy'; }, 1200);
-    } catch { /* clipboard may be blocked; the code is readable by hand */ }
-  };
-
-  $('share-code').onclick = async () => {
-    const url = location.origin + location.pathname;
-    try {
-      if (navigator.share) await navigator.share({ title: 'Hilltoppers Study', text: 'Study with me on Hilltoppers Study. My code: ' + state.handle });
-      else await navigator.clipboard.writeText('Study with me on Hilltoppers Study: ' + url + '  My code: ' + state.handle);
-    } catch { /* the classmate can read the code instead */ }
-  };
-
-  $('join-form').onsubmit = async (event) => {
+  $('signin-form').onsubmit = async (event) => {
     event.preventDefault();
-    showError('');
-    const handle = $('join-code').value.trim().toUpperCase();
-    if (handle.length !== HANDLE_LENGTH) return showError('Enter a 6-character code.');
+    signinError.hidden = true;
+    $('signin-forgot').hidden = true;
+    const email = $('signin-email').value.trim().toLowerCase();
+    const password = $('signin-password').value;
+    if (!isStudentEmail(email)) {
+      signinError.textContent = `Use your @${STUDENT_DOMAIN} school email.`;
+      signinError.hidden = false;
+      return;
+    }
+    const button = $('signin-submit');
+    button.disabled = true;
+    button.textContent = 'Signing in…';
     try {
-      state.session = await api('/session', { method: 'POST', body: JSON.stringify({ handle }) });
-      state.pendingHandle = state.session.role === 'host' ? handle : null;
-      renderSession();
-      startPolling();
-    } catch (error) { showError(error.message); }
+      const idToken = await hilltoppersSignIn(email, password);
+      await signInWithToken(idToken);
+      $('signin-password').value = '';
+      await renderHome();
+    } catch (error) {
+      signinError.textContent = error.message;
+      signinError.hidden = false;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Sign in';
+    }
+  };
+
+  // Study cannot reset a Hilltoppers password. Point the student at Hilltoppers
+  // instead of pretending to.
+  $('forgot').onclick = () => {
+    $('signin-forgot').hidden = false;
+    if (RESET_URL) window.open(RESET_URL, '_blank', 'noopener');
+  };
+
+  $('invite-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const email = $('invite-email').value.trim().toLowerCase();
+    if (!email) return;
+    await inviteByEmail(email, '');
+    $('invite-email').value = '';
   };
 
   $('cancel-wait').onclick = async () => {
@@ -484,12 +653,24 @@
     await leave();
   };
 
+  $('sign-out').onclick = async () => {
+    removeStore(STORE_KEY);
+    state.token = null;
+    state.profile = null;
+    state.directory = null;
+    stopPolling();
+    try { state.peer?.destroy(); } catch { /* ignore */ }
+    state.peer = null;
+    showView('signin');
+    setStatus('offline', 'Signed out');
+  };
+
   $('chat-form').onsubmit = (event) => {
     event.preventDefault();
     const text = $('chat-input').value.trim();
     if (!text) return;
     if (state.conn?.open) {
-      state.conn.send({ t: 'chat', name: state.handle, text: text.slice(0, MAX_MESSAGE) });
+      state.conn.send({ t: 'chat', name: state.profile?.name || 'Classmate', text: text.slice(0, MAX_MESSAGE) });
       addMessage(text, 'You', true);
     } else {
       system('Not connected yet.');
@@ -560,20 +741,30 @@
     showError('');
     setStatus('offline', 'Starting…');
     if (!readStore(WARNED_KEY)) $('warning').hidden = false;
-    if (!API_BASE) {
+    if (!API_BASE || !FIREBASE.apiKey) {
       showView('offline');
       setStatus('offline', 'Not configured');
       return;
     }
-    try {
-      await signIn();
-    } catch {
-      showView('offline');
-      setStatus('offline', 'Offline');
-      return;
+    // A saved token lets a student skip the sign-in form until it expires.
+    let saved = null;
+    try { saved = JSON.parse(readStore(STORE_KEY) || 'null'); } catch { saved = null; }
+    if (saved?.token) {
+      state.token = saved.token;
+      try {
+        state.profile = await api('/profile');
+        await renderHome();
+        try { await refreshSession(); } catch { /* no active session is normal */ }
+        return;
+      } catch {
+        // Expired or rejected: fall through to the sign-in form.
+        removeStore(STORE_KEY);
+        state.token = null;
+        state.profile = null;
+      }
     }
-    await renderHome();
-    try { await refreshSession(); } catch { /* no active session is normal */ }
+    showView('signin');
+    setStatus('online', 'Signed out');
   }
 
   boot();

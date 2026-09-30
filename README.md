@@ -6,23 +6,51 @@ that the extension embeds in the Topping panel, so nothing here touches the
 extension itself.
 
 - The website (this repo, served by GitHub Pages) is the Topping.
-- The Worker (`worker/`) hands out short lookup codes and authorizes rooms.
+- The Worker (`worker/`) signs students in, keeps who is free to study, and
+  authorizes rooms.
 - Chat and screen sharing go straight between the two browsers. The Worker
   never sees a message or a pixel.
 
+![Sign in with Hilltoppers](docs/signin.png)
 ![The home view](docs/home.png)
 ![The session view](docs/session.png)
 ![Fill tab, with the floating chat](docs/fill-mode.png)
 
+## Signing in
+
+There is no new account and no new password. Study signs in against the same
+Firebase project the Hilltoppers extension uses, so a student types their school
+email and the password they already have. Study creates nothing, stores no
+password, and cannot reset one; the **Forgot your password?** link says to reset
+it in Hilltoppers, because that is where the password lives.
+
+- The email must end in `@student.stjacademy.org`. Staff addresses are refused:
+  this is a student tool.
+- The Worker verifies the Firebase ID token itself (signature, issuer, audience,
+  expiry) against Google's published keys before it trusts anything. It never
+  receives a password.
+- The name shown to classmates is derived from the email
+  (`firstname.lastname@…` becomes `Firstname Lastname`). Everyone already knows
+  each other's school email, so there is nothing to type and nothing to fake.
+
 ## How a session works
 
-1. Each account gets a 6-character code. Ambiguous letters (O/0, I/1) are left
-   out so a code can be read aloud. The code is public; the long account id
-   behind it never is.
-2. Enter a classmate's code to invite them, or share your own code and wait.
-3. The invited side accepts. Only one side dials through PeerJS, so exactly one
+1. A student ticks the blocks in which they have **study hall** (any of A–E and
+   CP; more than one is fine).
+2. During that block their name appears in everyone's **Free to study** list.
+   Between blocks and after the last one the list shows everyone who has marked
+   a study hall, since the school day is over. On a holiday or weekend it shows
+   the same, because no block is running.
+3. Tapping a name, or typing a classmate's school email at any time, starts an
+   invite.
+4. The invited side accepts. Only one side dials through PeerJS, so exactly one
    chat channel and one screen call exist per room.
-4. Either side can share a screen. A room is 1:1 and ends after two hours.
+5. Either side can share a screen. A room is 1:1 and ends after two hours.
+
+The schedule is read from the same published files the extension reads
+(`day_type.json` and `special_days.json` on `hilltoppers.pages.dev`), so Green
+and White days, late starts, custom days and holidays all match. The bell times
+are copied from the extension's own `schedule/*.json`.
 
 ## Look and feel
 
@@ -49,23 +77,8 @@ card. It follows the Topping conventions in the Hilltoppers repo:
 - The page is embeddable in an iframe (no `X-Frame-Options`, no framing CSP).
 - Because the Topping iframe is `sandbox="allow-scripts ..."` without
   `allow-modals`, `window.confirm`/`alert` are blocked, so confirmations are
-  in-page overlays. `localStorage` is also blocked in a sandboxed cross-origin
-  frame, so every access is guarded and the app still runs.
-
-## Fill tab
-
-Under the picture there is a **Fill tab** button. It is not the browser's
-Fullscreen API: the picture is stretched to the height of the tab and the page
-scrolls, so it also works inside the Topping iframe, where a cross-origin frame
-is not allowed to go fullscreen. While it is on, the chat becomes a small panel
-floating over the picture, which the viewer can drag out of the way or collapse,
-and the rest of the page is hidden. The person sharing sees **Sharing tab** in
-place of their own picture, rather than a mirror of the window they are already
-looking at.
-
-Fill mode sets a viewport height on the picture only, never on
-`[data-topping-content]`, so the height reported to the extension still shrinks
-back when the mode is left.
+  in-page overlays. Every `localStorage` access is guarded so the app still runs
+  even where storage is refused.
 
 ## Screen sharing needs one change in Hilltoppers
 
@@ -89,6 +102,21 @@ permission. The fix is one attribute in
 
 Until then the app is fully usable for chat and the Share button explains that
 screen sharing is blocked, rather than failing silently.
+
+## Fill tab
+
+Under the picture there is a **Fill tab** button. It is not the browser's
+Fullscreen API: the picture is stretched to the height of the tab and the page
+scrolls, so it also works inside the Topping iframe, where a cross-origin frame
+is not allowed to go fullscreen. While it is on, the chat becomes a small panel
+floating over the picture, which the viewer can drag out of the way or collapse,
+and the rest of the page is hidden. The person sharing sees **Sharing tab** in
+place of their own picture, rather than a mirror of the window they are already
+looking at.
+
+Fill mode sets a viewport height on the picture only, never on
+`[data-topping-content]`, so the height reported to the extension still shrinks
+back when the mode is left.
 
 ## Relay (TURN), for school networks
 
@@ -145,7 +173,7 @@ public cloud and then fail anyway, which looks identical to "sharing is broken".
 
 These are the steps that match the current Cloudflare setup: Worker
 `hilltoppers-study`, D1 database `studystream-sessions`
-(`7cfc650d-c260-4857-b3cc-8f23b36223cb`), binding `DB_BINDING`, and the site at
+(`7cfc650d-c260-4857-b3cc-8f23b36223cb`), binding `DB_BINDING`, and the API at
 `https://hilltoppers-study.amos-donn.workers.dev`.
 
 ### 1. Worker
@@ -197,9 +225,9 @@ The `d1 execute` line is optional: the Worker creates the tables itself.
 
 ### 2. Website
 
-In `config.js`, set `window.STUDYSTREAM_API` to the deployed Worker URL. Then
-serve this repo with GitHub Pages (Settings → Pages → Deploy from a branch →
-`main` / root). The Topping URL is the Pages URL.
+`config.js` already points at the deployed Worker and the Hilltoppers Firebase
+project. Serve this repo with GitHub Pages (Settings → Pages → Deploy from a
+branch → `main` / root). The Topping URL is the Pages URL.
 
 ### 3. Add it to Hilltoppers
 
@@ -210,21 +238,28 @@ and open it in the popup.
 
 ```sh
 cd worker
-npm run typecheck                        # no errors
-npm run build                            # wrangler deploy --dry-run
+npm run typecheck                          # no errors
+npm run build                              # wrangler deploy --dry-run
 node scripts/manual-test.mjs <worker-url>  # API end to end
 ```
 
+`manual-test.mjs` signs in two throwaway students against the Hilltoppers
+Firebase project, exercises the API, and deletes the accounts afterwards.
+
 There are no browser tests. The UI was checked by hand and with a scripted
-browser at the Topping width: sign-in, invite and accept across two windows,
-two-way chat, the share/stop flow with a stubbed capture stream, the
-permission-denied message, and the resize protocol. Screen capture itself needs
-a real display and the `allow="display-capture"` change above.
+browser at the Topping width: sign-in (including a wrong password and a
+non-school email), study-hall blocks, the free-to-study list across two
+accounts, invite and accept, and the layout at 318px with no horizontal
+overflow. Screen capture itself needs a real display and the
+`allow="display-capture"` change above.
 
 ## Privacy
 
-- No email, password, or message content is stored. An account is a random id
-  plus a random secret kept only on the student's device.
+- No password, email content, or message content is stored by Study. An account
+  is the school email plus the blocks the student marked; sign-in is delegated
+  to the Hilltoppers Firebase project.
 - Chat and screen media are peer to peer. The Worker learns who is in a room
   together, and only until the room ends.
-- `/api` is rate-limited, and stale accounts and rooms are swept hourly.
+- The PeerJS identity of each student is a hash, so the Firebase uid is not
+  exposed on the signalling network.
+- `/api` is rate-limited, and stale students and rooms are swept hourly.

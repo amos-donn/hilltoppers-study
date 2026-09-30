@@ -321,3 +321,89 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .composer, .join { gap: 6px; }
   .code { font-size: 20px; }
 }
+
+/* Sign-in form */
+.stack { display: flex; flex-direction: column; gap: 5px; }
+.stack .field-label { margin-top: 4px; }
+.stack input {
+  min-width: 0;
+  font: inherit;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.stack input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+.stack .primary { margin-top: 8px; }
+/* A link that reads as a link but is a button, so it needs no href. */
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link:hover { color: #14652c; }
+
+/* The signed-in student's own name */
+.student-name { font-size: 15px; font-weight: 700; color: var(--heading); }
+
+/* Study-hall block picker */
+.blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+.block {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--label);
+  cursor: pointer;
+}
+.block:has(input:checked) {
+  border-color: var(--accent-border);
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-weight: 600;
+}
+.block input { margin: 0; accent-color: var(--accent); }
+
+/* Who is free to study: the popup's schedule list — one bordered surface with
+   rows divided by a hairline. */
+.students {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.students:empty { display: none; }
+.student {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.student + .student { border-top: 1px solid var(--border-soft); }
+.student:hover { background: var(--surface-muted); }
+.student .student-name { font-size: 13px; font-weight: 600; color: var(--heading); }
+.student .student-where { font-size: 11px; color: var(--muted); }
+
+.email-input { text-transform: none; letter-spacing: normal; }

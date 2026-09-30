@@ -18,10 +18,6 @@ window.STUDYSTREAM_FIREBASE = {
   projectId: 'schedule-59d28'
 };
 
-/* Where a student resets a forgotten password. Study cannot change it, because
- * the password belongs to the Hilltoppers account. */
-window.STUDYSTREAM_RESET_URL = 'https://hilltoppers.pages.dev/';
-
 /* Relay (TURN) servers for the WebRTC handshake.
  *
  * Leave this empty. The Worker hands out short-lived relay credentials at

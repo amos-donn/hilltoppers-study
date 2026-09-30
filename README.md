@@ -21,8 +21,8 @@ extension itself.
 There is no new account and no new password. Study signs in against the same
 Firebase project the Hilltoppers extension uses, so a student types their school
 email and the password they already have. Study creates nothing, stores no
-password, and cannot reset one; the **Forgot your password?** link says to reset
-it in Hilltoppers, because that is where the password lives.
+password, and cannot reset one; the **Forgot your password?** note says to reset
+it in the Hilltoppers extension, because that is where the password lives.
 
 - The email must end in `@student.stjacademy.org`. Staff addresses are refused:
   this is a student tool.

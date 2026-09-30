@@ -13,7 +13,6 @@
   const API_BASE = (window.STUDYSTREAM_API || '').replace(/\/+$/, '');
   const PEER_OPTIONS = window.STUDYSTREAM_PEER || {};
   const FIREBASE = window.STUDYSTREAM_FIREBASE || {};
-  const RESET_URL = window.STUDYSTREAM_RESET_URL || '';
   const STUDENT_DOMAIN = 'student.stjacademy.org';
   const MAX_MESSAGE = 4000;
   const STORE_KEY = 'hilltoppers-study.account.v1';
@@ -603,7 +602,6 @@
   $('signin-form').onsubmit = async (event) => {
     event.preventDefault();
     signinError.hidden = true;
-    $('signin-forgot').hidden = true;
     const email = $('signin-email').value.trim().toLowerCase();
     const password = $('signin-password').value;
     if (!isStudentEmail(email)) {
@@ -626,13 +624,6 @@
       button.disabled = false;
       button.textContent = 'Sign in';
     }
-  };
-
-  // Study cannot reset a Hilltoppers password. Point the student at Hilltoppers
-  // instead of pretending to.
-  $('forgot').onclick = () => {
-    $('signin-forgot').hidden = false;
-    if (RESET_URL) window.open(RESET_URL, '_blank', 'noopener');
   };
 
   $('invite-form').onsubmit = async (event) => {

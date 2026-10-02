@@ -13,11 +13,21 @@
   --border-soft: rgba(17, 17, 17, 0.08);
   --text: #111111;
   --heading: #161b22;
-  --muted: #7d8591;
+  /* Hilltoppers uses #7d8591 for tertiary text, but it only reaches 3.5:1 on
+     this surface. #647067 is the same source family (.footer-action) and clears
+     AA at 4.9:1, so notes, labels and status text stay readable. */
+  --muted: #647067;
   --label: #555f6a;
   --accent: #1a7f37;
   --accent-muted: rgba(26, 127, 55, 0.12);
-  --accent-border: rgba(26, 127, 55, 0.25);
+  /* The popup's primary CTA (.grade-prompt-continue): a soft mint pill with
+     dark-green text hovering to a brighter mint — not a saturated green fill. */
+  --accent-strong: #14532d;
+  --accent-soft: #abe0bc;
+  --accent-soft-hover: #8fd4a6;
+  /* Neutral pill (.grade-prompt-row) behind chips and quiet buttons. */
+  --pill: #ebeef2;
+  --pill-hover: #dfe3e8;
   --danger: #bc4c2c;
 }
 
@@ -54,7 +64,7 @@ html, body {
   justify-content: space-between;
   gap: 8px;
 }
-.app-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--heading); }
+.app-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--heading); }
 .statusbar { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #a0a7b0; flex: 0 0 auto; }
 .dot.online { background: var(--accent); }
@@ -69,7 +79,7 @@ html, body {
 /* Credit under the title, with a hairline between. */
 .brand { margin-top: -2px; }
 .brand-rule { height: 0; margin: 0; border: 0; border-top: 1px solid var(--border-soft); }
-.brand-credit { margin: 5px 0 0; font-size: 10.5px; color: var(--muted); }
+.brand-credit { margin: 5px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
 
 /* Card */
 .card {
@@ -81,24 +91,25 @@ html, body {
   flex-direction: column;
   gap: 8px;
 }
-.card-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--heading); }
+.card-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--heading); }
 .code-card { align-items: center; text-align: center; }
 .field-label {
   margin: 0;
   font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--muted);
+  color: var(--label);
 }
 .code {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 2px;
   color: var(--heading);
   font-variant-numeric: tabular-nums;
 }
-.note { margin: 0; font-size: 12px; color: var(--muted); }
-.error { margin: 0; font-size: 12.5px; color: var(--danger); font-weight: 500; }
+.note { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--danger); font-weight: 500; }
 .error[hidden] { display: none; }
 
 .sr-only {
@@ -106,45 +117,54 @@ html, body {
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Buttons: same shapes as the popup's secondary controls and the settings
-   page's primary button. */
+/* Buttons: the popup's pill system — a soft mint primary
+   (.grade-prompt-continue), a bordered secondary (.schedule-toggle) and a bare
+   ghost (.footer-action). Radius 999px, 13px/500, colour-only 0.15s easing. */
 button {
   font: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px 15px;
+  border: 1px solid transparent;
   background: var(--surface);
   color: var(--label);
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-button:disabled { opacity: 0.6; cursor: default; }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.55; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent-strong);
   font-weight: 600;
 }
-.primary:not(:disabled):hover { box-shadow: 0 8px 16px rgba(26, 127, 55, 0.25); transform: translateY(-1px); }
+.primary:not(:disabled):hover { background: var(--accent-soft-hover); border-color: var(--accent-soft-hover); }
 
-.secondary { font-weight: 500; }
+.secondary { border-color: rgba(17, 17, 17, 0.14); font-weight: 500; }
 .secondary:not(:disabled):hover { background: #f3f5f7; border-color: rgba(17, 17, 17, 0.28); }
 
-.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-.ghost:not(:disabled):hover { background: var(--surface-muted); color: var(--label); }
+.ghost { background: transparent; border-color: transparent; color: var(--muted); font-weight: 400; }
+.ghost:not(:disabled):hover { background: var(--pill); color: var(--label); }
 .ghost.danger { color: var(--danger); align-self: flex-start; }
 .ghost.danger:not(:disabled):hover { background: rgba(188, 76, 44, 0.12); color: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+}
 
 /* Inputs */
 .join { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
 .code-input, .composer input {
   min-width: 0;
+  min-height: 38px;
   font: inherit;
-  padding: 9px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
   background: #ffffff;
   color: var(--text);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -327,10 +347,12 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stack .field-label { margin-top: 4px; }
 .stack input {
   min-width: 0;
+  min-height: 38px;
   font: inherit;
-  padding: 9px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
   background: #ffffff;
   color: var(--text);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -343,29 +365,32 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stack .primary { margin-top: 8px; }
 
 /* The signed-in student's own name */
-.student-name { font-size: 15px; font-weight: 700; color: var(--heading); }
+.student-name { font-size: 15px; font-weight: 600; color: var(--heading); }
 
 /* Study-hall block picker */
 .blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Neutral pill (.grade-prompt-row); ticked = mint pill (.grade-prompt-row.selected). */
 .block {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--pill);
+  color: #4a5560;
   font-size: 12px;
-  color: var(--label);
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
+.block:hover { background: var(--pill-hover); color: #161b22; }
 .block:has(input:checked) {
-  border-color: var(--accent-border);
-  background: var(--accent-muted);
-  color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-weight: 600;
 }
-.block input { margin: 0; accent-color: var(--accent); }
+.block input { margin: 0; accent-color: var(--accent-strong); }
 
 /* Who is free to study: the popup's schedule list — one bordered surface with
    rows divided by a hairline. */

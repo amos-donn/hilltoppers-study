@@ -56,3 +56,26 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_uid);
 CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid);
+
+-- One Web Push subscription per browser a student turned notifications on in.
+-- The endpoint and its two key halves come from the browser's PushManager and
+-- are the only way to reach that browser; nothing here identifies a device, so
+-- a student who signs in on a Chromebook and a phone simply has two rows.
+--
+-- The endpoint is the primary key rather than (uid, endpoint) because a browser
+-- hands back the same endpoint when it re-subscribes, and the Worker's upsert
+-- relies on that to update a row instead of adding a second one.
+--
+-- ON DELETE CASCADE means the hourly sweep in cleanup() clears a departed
+-- student's subscriptions along with their account. Nothing is ever sent
+-- without a matching row: with no VAPID pair configured, or no row here, an
+-- invite is simply not pushed.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  uid TEXT NOT NULL REFERENCES students(uid) ON DELETE CASCADE,
+  endpoint TEXT PRIMARY KEY,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_uid ON push_subscriptions(uid);

@@ -262,6 +262,140 @@
     }
   }
 
+  // -- Notifications -----------------------------------------------------
+  // The Topping is a cross-origin, sandboxed iframe inside the Hilltoppers
+  // popup, and the browser refuses Notification.requestPermission() in a
+  // cross-origin frame. So the prompt happens on an ordinary tab of this same
+  // page, and the button below opens one. The service worker and the push
+  // subscription that follow are per-origin and per-browser, so once they
+  // exist they keep working from inside the popup afterwards: a classmate's
+  // invite reaches this browser even with the popup shut, and the extension
+  // needs no change at all.
+  const NOTIFY_KEY = 'hilltoppers-study.notify.v1';
+
+  function pushSupported() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  }
+
+  // Rebuilt rather than reused from location.href: the embed URL carries the
+  // extension's ?host= and ?session= parameters, which a plain tab does not
+  // want.
+  function siteUrl(query) {
+    return location.origin + location.pathname + (query || '');
+  }
+
+  function base64UrlToBytes(value) {
+    const padded = String(value).replaceAll('-', '+').replaceAll('_', '/');
+    const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  }
+
+  function setNotifyNote(text) {
+    const note = $('notify-note');
+    if (note) note.textContent = text;
+  }
+
+  // The scope is this page's own directory, so the worker can never intercept
+  // anything outside the Topping.
+  async function registerServiceWorker() {
+    return navigator.serviceWorker.register('sw.js');
+  }
+
+  async function subscribeToPush() {
+    const key = await api('/push/key');
+    if (!key.configured) {
+      setNotifyNote('The server is not set up for notifications yet.');
+      return false;
+    }
+    const registration = await registerServiceWorker();
+    // Reuse the browser's existing subscription when there is one: calling
+    // subscribe() again is allowed, but it re-sends the same endpoint to the
+    // Worker and buys nothing.
+    const subscription = (await registration.pushManager.getSubscription())
+      || await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToBytes(key.publicKey)
+      });
+    await api('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription.toJSON()) });
+    writeStore(NOTIFY_KEY, 'on');
+    return true;
+  }
+
+  // A tab the button opened lands here with ?notify=1. The saved token is
+  // shared with the popup, so by the time renderHome() runs the student is
+  // already signed in and the prompt can be shown straight away.
+  function openNotifyTab() {
+    const opened = window.open(siteUrl('?notify=1'), '_blank');
+    if (opened) { try { opened.opener = null; } catch { /* ignore */ } }
+    setNotifyNote(opened
+      ? 'Finish turning notifications on in the tab that just opened.'
+      : 'Chrome blocked the new tab. Open ' + siteUrl('') + ' in a tab and turn them on there.');
+    return false;
+  }
+
+  // Returns true only when this browser ends up subscribed.
+  async function enableNotifications() {
+    if (!pushSupported()) {
+      setNotifyNote('This browser cannot show notifications for the Topping.');
+      return false;
+    }
+    if (Notification.permission === 'denied') {
+      setNotifyNote('Notifications are blocked for this site in Chrome. Allow them in the site settings, then try again.');
+      return false;
+    }
+    // Inside the popup the prompt is refused outright, so hand off to a tab.
+    if (Notification.permission !== 'granted' && window.self !== window.top) return openNotifyTab();
+    try {
+      if (Notification.permission !== 'granted') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          setNotifyNote('Notifications were not allowed.');
+          return false;
+        }
+      }
+      return await subscribeToPush();
+    } catch {
+      // Registering from inside the popup iframe can be refused even with
+      // permission already granted; an ordinary tab always works.
+      if (window.self !== window.top) return openNotifyTab();
+      setNotifyNote('Could not turn notifications on. Try again.');
+      return false;
+    }
+  }
+
+  async function refreshNotifyCard() {
+    const card = $('notify-card');
+    if (!card) return;
+    if (!pushSupported()) { card.hidden = true; return; }
+    card.hidden = false;
+    const button = $('notify-button');
+    let subscribed = false;
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      subscribed = Boolean(await registration?.pushManager.getSubscription());
+    } catch { subscribed = false; }
+    const blocked = Notification.permission === 'denied';
+    button.disabled = subscribed || blocked;
+    button.textContent = subscribed
+      ? 'Notifications are on'
+      : blocked ? 'Notifications blocked' : 'Turn on notifications';
+    if (subscribed) {
+      setNotifyNote('This browser gets a notification when a classmate invites you.');
+    } else if (blocked) {
+      setNotifyNote('Notifications are blocked for this site in Chrome. Allow them in the site settings, then reload the Topping.');
+    } else if (!readStore(NOTIFY_KEY)) {
+      setNotifyNote('Get a notification when a classmate invites you, even while the Topping is closed.');
+    }
+  }
+
+  let notifyHandled = false;
+  async function finishNotifySetup() {
+    if (notifyHandled) return;
+    if (new URLSearchParams(location.search).get('notify') !== '1') return;
+    notifyHandled = true;
+    if (await enableNotifications()) await refreshNotifyCard();
+  }
+
   // -- PeerJS ------------------------------------------------------------
   // Merge relay servers from the Worker with anything set in config.js, so a
   // static TURN server can be used before the Worker one is configured.
@@ -594,6 +728,9 @@
     // can pull us into a session.
     startPolling();
     refreshDirectory();
+    refreshNotifyCard();
+    // Only does anything on a tab opened with ?notify=1.
+    finishNotifySetup();
   }
 
   // -- Events ------------------------------------------------------------
@@ -642,6 +779,10 @@
   $('end').onclick = async () => {
     try { await api('/session/end', { method: 'POST', body: JSON.stringify({}) }); } catch { /* leaving anyway */ }
     await leave();
+  };
+
+  $('notify-button').onclick = async () => {
+    if (await enableNotifications()) await refreshNotifyCard();
   };
 
   $('sign-out').onclick = async () => {

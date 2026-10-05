@@ -28,4 +28,4 @@ jobs:
         working-directory: .
         run: npx --prefix worker wrangler deploy --dry-run --outdir /tmp/dist --config wrangler.toml
       - name: Check the site scripts parse
-        run: node --check ../app.js && node --check ../config.js && node --check ../resize.js
+        run: node --check ../app.js && node --check ../config.js && node --check ../resize.js && node --check ../sw.js

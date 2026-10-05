@@ -11,6 +11,8 @@ import {
 } from './http';
 import { isStudentEmail, nameFromEmail, verifyFirebaseToken } from './firebase';
 import { availability, blockAt, loadDaySchedule, STUDY_BLOCK_LETTERS } from './schedule';
+import { readVapidKeys, sendPush } from './push';
+import type { PushMessage } from './push';
 
 export interface Env {
   DB_BINDING: D1Database;
@@ -37,6 +39,19 @@ export interface Env {
   // Override for the credential endpoint. Only for tests or a self-hosted
   // issuer; leave unset to use Metered.
   TURN_API_BASE?: string;
+  // Web Push (VAPID). The public half is handed to the browser so it can
+  // subscribe; the private half signs every push and never leaves the Worker.
+  // Both are base64url, exactly as a VAPID generator writes them: 65 bytes for
+  // the public point and 32 for the private scalar. Set them the same way as
+  // SESSION_HMAC_KEY. While they are unset, /api/push/key answers
+  // configured:false, subscribing is refused, and invites stay poll-only — the
+  // site works exactly as it did before.
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  // Contact address for the VAPID `sub` claim, which a push service uses to
+  // reach the operator about a sender that misbehaves. A mailto: or https: URL.
+  // Defaults to the site's own origin, which ALLOWED_ORIGINS already supplies.
+  VAPID_SUBJECT?: string;
 }
 
 const SESSION_TTL = 2 * 60 * 60;
@@ -75,7 +90,15 @@ const SCHEMA_STATEMENTS = [
     ended_by TEXT
   )`,
   'CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_uid)',
-  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid)'
+  'CREATE INDEX IF NOT EXISTS idx_sessions_guest ON sessions(guest_uid)',
+  `CREATE TABLE IF NOT EXISTS push_subscriptions (
+    uid TEXT NOT NULL REFERENCES students(uid) ON DELETE CASCADE,
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_push_subscriptions_uid ON push_subscriptions(uid)'
 ];
 
 // One-time cleanup of the prototype's tables. The old shape keyed accounts by a
@@ -308,6 +331,28 @@ async function findOrCreateSession(db: D1Database, me: string, peer: string, now
   return json(await sessionPayload(db, row, me), 201);
 }
 
+// Sends one notification to every browser a student has switched them on in.
+//
+// Only ever called from waitUntil, so a push service being slow or down can
+// never delay the invite or the accept that triggered it. A subscription the
+// service reports as gone is deleted here rather than retried on every later
+// invite.
+async function notifyStudent(db: D1Database, env: Env, uid: string, message: PushMessage): Promise<void> {
+  const keys = readVapidKeys(env);
+  if (!keys) return;
+  const rows = await db.prepare(
+    'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE uid = ?'
+  ).bind(uid).all<{ endpoint: string; p256dh: string; auth: string }>();
+  const targets = rows.results ?? [];
+  if (targets.length === 0) return;
+  await Promise.all(targets.map(async (target) => {
+    const outcome = await sendPush(keys, target, message);
+    if (outcome === 'gone') {
+      await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(target.endpoint).run();
+    }
+  }));
+}
+
 // Returns the matching CORS origin, or null when the request comes from no
 // origin (same-origin GET) or from an origin we do not allow.
 function allowedOrigin(request: Request, env: Env, url: URL): string | null {
@@ -318,7 +363,7 @@ function allowedOrigin(request: Request, env: Env, url: URL): string | null {
   return list.includes(origin) ? origin : null;
 }
 
-function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
+function handleApi(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
   const origin = allowedOrigin(request, env, url);
   const cors: Record<string, string> = origin
     ? {
@@ -336,7 +381,7 @@ function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   if (!origin) {
     return Promise.resolve(json({ error: 'Open Hilltoppers Study to use it.' }, 403));
   }
-  return apiResponse(request, env, url).then((response) => {
+  return apiResponse(request, env, url, ctx).then((response) => {
     for (const [name, value] of Object.entries(cors)) response.headers.set(name, value);
     return response;
   });
@@ -363,7 +408,7 @@ async function profileView(db: D1Database, uid: string) {
   };
 }
 
-async function apiResponse(request: Request, env: Env, url: URL): Promise<Response> {
+async function apiResponse(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
   const key = requireSigningKey(env);
   if (!key) return json({ error: 'Hilltoppers Study is not configured yet.' }, 503);
   const db = env.DB_BINDING;
@@ -443,6 +488,52 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
     return json(await profileView(db, me), 200);
   }
 
+  // -- Push notifications (Web Push / VAPID) ------------------------------
+  // The VAPID public key is not a secret: it is the half a browser hands to its
+  // push service so the service can check our signature. It is still served
+  // only to a signed-in student, so there is no anonymous endpoint to probe.
+  if (path === '/push/key' && request.method === 'GET') {
+    const keys = readVapidKeys(env);
+    return json({ configured: Boolean(keys), publicKey: keys?.publicKey ?? '' }, 200);
+  }
+
+  // A browser that just subscribed. The row is keyed by the endpoint, so
+  // re-subscribing on the same browser updates it instead of piling up rows,
+  // and a student with a Chromebook and a phone simply has one row each.
+  if (path === '/push/subscribe' && request.method === 'POST') {
+    const body = await readJson(request);
+    const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : '';
+    const supplied = (body?.keys ?? {}) as { p256dh?: unknown; auth?: unknown };
+    const p256dh = typeof supplied.p256dh === 'string' ? supplied.p256dh : '';
+    const auth = typeof supplied.auth === 'string' ? supplied.auth : '';
+    // Every real push endpoint is https:, so refusing anything else keeps a
+    // half-built subscription (or a probe) out of the table.
+    if (!/^https:\/\//i.test(endpoint) || !p256dh || !auth) {
+      return json({ error: 'That subscription is not usable.' }, 400);
+    }
+    await db.prepare(
+      `INSERT INTO push_subscriptions (uid, endpoint, p256dh, auth, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(endpoint) DO UPDATE SET
+         uid = excluded.uid, p256dh = excluded.p256dh, auth = excluded.auth`
+    ).bind(me, endpoint, p256dh, auth, now).run();
+    await bump(db, 'push_subscriptions');
+    return json({ ok: true, configured: Boolean(readVapidKeys(env)) }, 200);
+  }
+
+  // Switching notifications off, or a browser saying it is going away.
+  if (path === '/push/unsubscribe' && request.method === 'POST') {
+    const body = await readJson(request);
+    const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : '';
+    if (endpoint) {
+      // Scoped to this student, so one account cannot clear another's row by
+      // naming its endpoint.
+      await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND uid = ?')
+        .bind(endpoint, me).run();
+    }
+    return json({ ok: true }, 200);
+  }
+
   // Who is free to study right now. During a study-hall block this is the
   // student's own block; after the last block the school day is over and
   // everyone who has marked study halls is listed.
@@ -498,7 +589,19 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
     const target = await db.prepare('SELECT uid FROM students WHERE email = ?')
       .bind(email).first<{ uid: string }>();
     if (!target) return json({ error: 'No student with that email has signed in yet.' }, 404);
-    return findOrCreateSession(db, me, target.uid, now);
+    const response = await findOrCreateSession(db, me, target.uid, now);
+    // Only a brand-new room is worth notifying about. A row that already
+    // existed is either a room the pair is already in or an invite the guest
+    // has already seen, and re-sending on every retry would just be noise.
+    if (response.status === 201) {
+      ctx.waitUntil(notifyStudent(db, env, target.uid, {
+        title: 'Study invite',
+        body: `${student.name} wants to study with you.`,
+        url: './',
+        tag: 'hilltoppers-study-invite'
+      }).catch(() => { /* a push problem must not fail the invite */ }));
+    }
+    return response;
   }
 
   // The invited classmate accepts, which activates the room for both sides.
@@ -511,7 +614,17 @@ async function apiResponse(request: Request, env: Env, url: URL): Promise<Respon
       : null;
     if (!row || row.guest_uid !== me) return json({ error: 'That invite is no longer available.' }, 404);
     await db.prepare('UPDATE sessions SET guest_accepted = 1 WHERE id = ?').bind(row.id).run();
-    return json(await sessionPayload(db, { ...row, guest_accepted: 1 }, me), 200);
+    const accepted = await sessionPayload(db, { ...row, guest_accepted: 1 }, me);
+    // The host is the one sitting on the waiting screen, often with the popup
+    // shut, so this is the notification that saves them refreshing. `student`
+    // here is the guest who just accepted.
+    ctx.waitUntil(notifyStudent(db, env, row.host_uid, {
+      title: 'Invite accepted',
+      body: `${student.name} accepted. Your study room is ready.`,
+      url: './',
+      tag: 'hilltoppers-study-accepted'
+    }).catch(() => { /* ignore */ }));
+    return json(accepted, 200);
   }
 
   if (path === '/session' && request.method === 'GET') {
@@ -538,17 +651,17 @@ async function cleanup(env: Env): Promise<void> {
   await env.DB_BINDING.prepare(
     'DELETE FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?'
   ).bind(now - 24 * 60 * 60).run();
-  // Cascades remove the student's sessions.
+  // Cascades remove the student's sessions and push subscriptions with them.
   await env.DB_BINDING.prepare('DELETE FROM students WHERE last_seen < ?').bind(now - IDLE_ACCOUNT_TTL).run();
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) {
       return json({ error: 'Not found.' }, 404);
     }
-    const response = await handleApi(request, env, url);
+    const response = await handleApi(request, env, url, ctx);
     response.headers.set('X-Content-Type-Options', 'nosniff');
     response.headers.set('Referrer-Policy', 'no-referrer');
     return response;

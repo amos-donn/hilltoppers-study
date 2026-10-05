@@ -169,6 +169,50 @@ public cloud and then fail anyway, which looks identical to "sharing is broken".
 `npx wrangler secret put TURN_API_KEY --config ../wrangler.toml`, from
 `worker/`.)
 
+## Notifications (Web Push)
+
+A student can turn on Chrome notifications for invites, so a classmate asking to
+study reaches them even with the Hilltoppers popup closed. In the Topping it is
+the **Notifications** card on the home view.
+
+Why this needs a page, a service worker and a Worker, rather than one line in
+the Topping: the Topping runs in a cross-origin, sandboxed iframe inside the
+popup, and Chrome refuses `Notification.requestPermission()` there. So **Turn on
+notifications** opens this same page as an ordinary tab, where the prompt is
+allowed. What that tab sets up afterwards — a service worker (`sw.js`) and a
+push subscription — is per-origin and per-browser, so it keeps working from
+inside the popup with nothing changed in the extension.
+
+- Invites and accepts are pushed by the Worker at the moment they happen, from
+  `waitUntil`, so a slow push service can never delay the invite itself.
+- The payload is encrypted to the browser (RFC 8291), so the push service
+  relays bytes it cannot read. The text is the classmate's name and "wants to
+  study with you" — nothing about the room, the chat, or the screen.
+- A subscription the push service reports as gone (`404`/`410`) is deleted
+  rather than retried. Students are swept hourly, and their subscriptions
+  cascade away with them.
+- `sw.js` caches nothing and has no `fetch` listener, so it cannot serve a
+  stale Topping or interfere with the page.
+
+### Turning it on
+
+1. Generate a VAPID key pair, for example with
+   `npx web-push generate-vapid-keys` from a terminal.
+2. In the Cloudflare dashboard: Worker → **Settings → Variables and Secrets →
+   Add → Secret**, then add `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` with the
+   two values. Both are base64url, exactly as the generator prints them.
+3. Optionally add `VAPID_SUBJECT` — a `mailto:` or `https:` address a push
+   service can use to report a problem with the sender. It defaults to the
+   site's own origin from `ALLOWED_ORIGINS`, so leaving it unset is fine.
+4. Reload the Topping and press **Turn on notifications**, once per browser.
+
+The public key is not a secret: it is the half the browser hands to its push
+service so the service can check the Worker's signature. The private key signs
+every push and never leaves the Worker.
+
+While no key pair is set, `/api/push/key` answers `configured:false`, the card
+says the server is not set up, and invites behave exactly as they always did.
+
 ## Deploy
 
 These are the steps that match the current Cloudflare setup: Worker
@@ -262,4 +306,9 @@ overflow. Screen capture itself needs a real display and the
   together, and only until the room ends.
 - The PeerJS identity of each student is a hash, so the Firebase uid is not
   exposed on the signalling network.
+- A push subscription is a browser endpoint plus two public key halves, stored
+  against the student who turned notifications on. It carries no device name and
+  no location, it is only ever used to send that student their own invites, and
+  it is deleted when the push service reports it gone or when the student is
+  swept.
 - `/api` is rate-limited, and stale students and rooms are swept hourly.

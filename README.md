@@ -64,10 +64,22 @@ The toolbar carries no branding: no mark, no title, no credit line. The Topping
 is already inside Hilltoppers, so repeating it there is noise. What is left is a
 status dot, whose wording sits in its label rather than on screen, and a
 [Phosphor](https://phosphoricons.com) `gear` (regular weight, inlined as SVG)
-that reveals the word `Settings` on hover and opens the settings panel. The
-account email and the study-hall blocks are edited there, not on the home view.
-`favicon.png` remains the tab icon and `apple-touch-icon.png` the home-screen
-icon; `logo.png` is no longer referenced by the page.
+that reveals the word `Settings` on hover and opens Settings. Settings is a view
+like the others rather than a dialog over a dimmed page: it sits on the same
+background, and the Topping grows to its own height instead of needing a scroll
+box. The account email and the study-hall blocks are edited there, not on the
+home view. `favicon.png` remains the tab icon and `apple-touch-icon.png` the
+home-screen icon; `logo.png` is no longer referenced by the page.
+
+Buttons are the popup's shapes and only those. A prominent action is the mint
+pill of `.grade-prompt-continue` — `#abe0bc` on `#14532d`, `999px`, hovering to
+`#8fd4a6` — and every other button is the bordered rectangle of
+`.schedule-toggle`: 6px, a `0.12` hairline, hovering to `#f3f5f7` on a `0.18`
+border. Quiet actions follow `.footer-action`, bare text that changes colour on
+hover and never paints a box behind the word. A bordered *pill* is a shape the
+popup never draws. The study-hall blocks are the neutral pill of
+`.grade-prompt-row`, filling mint when picked: the pill carries the tick instead
+of framing a checkbox, which is how the popup shows a chosen option.
 
 ## Layout
 
@@ -112,11 +124,16 @@ screen sharing is blocked, rather than failing silently.
 Under the picture there is a **Fill tab** button. It is not the browser's
 Fullscreen API: the picture is stretched to the height of the tab and the page
 scrolls, so it also works inside the Topping iframe, where a cross-origin frame
-is not allowed to go fullscreen. While it is on, the chat becomes a small panel
-floating over the picture, which the viewer can drag out of the way or collapse,
-and the rest of the page is hidden. The person sharing sees **Sharing tab** in
+is not allowed to go fullscreen. The person sharing sees **Sharing tab** in
 place of their own picture, rather than a mirror of the window they are already
 looking at.
+
+While it is on, the rest of the page is hidden. On the site opened as its own
+page the chat becomes a small panel floating over the picture, which the viewer
+can drag out of the way or collapse. Inside the Topping it does not: a draggable
+box would sit on top of the picture in a 318px popup, so there the chat waits
+until the mode is left. The page tells the two apart by whether it has a parent
+window (`window.parent !== window`, `EMBEDDED` in `app.js`).
 
 Fill mode sets a viewport height on the picture only, never on
 `[data-topping-content]`, so the height reported to the extension still shrinks

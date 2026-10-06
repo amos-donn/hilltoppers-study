@@ -12,6 +12,11 @@
   const Peer = window.Peer;
   const API_BASE = (window.STUDYSTREAM_API || '').replace(/\/+$/, '');
   const PEER_OPTIONS = window.STUDYSTREAM_PEER || {};
+  // The Topping runs inside the extension's popup iframe; the same page opened
+  // as its own tab is not embedded. Only the floating chat distinguishes the
+  // two, because a chat box dragged over the shared picture is in the way on a
+  // 318px popup and useful on a full window.
+  const EMBEDDED = window.parent !== window;
   const FIREBASE = window.STUDYSTREAM_FIREBASE || {};
   const STUDENT_DOMAIN = 'student.stjacademy.org';
   const MAX_MESSAGE = 4000;
@@ -22,10 +27,9 @@
   const $ = (id) => document.getElementById(id);
   const views = {
     offline: $('view-offline'), signin: $('view-signin'), home: $('view-home'),
-    waiting: $('view-waiting'), session: $('view-session')
+    settings: $('settings'), waiting: $('view-waiting'), session: $('view-session')
   };
   const statusDot = $('status-dot');
-  const settingsPanel = $('settings');
   const settingsToggle = $('settings-toggle');
   const homeError = $('home-error');
   const signinError = $('signin-error');
@@ -57,25 +61,29 @@
     if (element) element.onclick = handler;
   }
 
-  // Settings is a panel over whatever view is showing, so it is opened and
-  // closed rather than switched to.
-  function setSettingsOpen(open) {
-    if (!settingsPanel || !settingsToggle) return;
-    settingsPanel.hidden = !open;
-    settingsToggle.setAttribute('aria-expanded', String(open));
+  // Settings is a view, so opening it is an ordinary view change and leaving it
+  // means going back to whatever is true by then: an invite can land while it is
+  // open, and polling keeps state.session current, so the room wins over home.
+  function openSettings() {
+    showView('settings');
+  }
+
+  function leaveSettings() {
+    if (state.session) return void renderSession();
+    return void renderHome();
   }
 
   function showView(name) {
-    // Polling re-renders the same view every couple of seconds, so only a real
-    // change closes the panel. Closing on every call would slam it shut while a
-    // student was using it, and never closing it would hide an arriving invite
-    // behind it.
-    if (state.view !== name) {
-      state.view = name;
-      setSettingsOpen(false);
-    }
+    // A view this markup does not have — a stale script against newer markup,
+    // or the reverse — must not leave the Topping showing nothing, which is
+    // exactly what naming a missing view would do.
+    if (!views[name] && views.home) name = 'home';
+    state.view = name;
     // Nothing to configure before signing in.
-    if (settingsToggle) settingsToggle.hidden = !state.profile;
+    if (settingsToggle) {
+      settingsToggle.hidden = !state.profile;
+      settingsToggle.setAttribute('aria-expanded', String(name === 'settings'));
+    }
     for (const [key, element] of Object.entries(views)) {
       if (element) element.hidden = key !== name;
     }
@@ -468,8 +476,12 @@
   function applyFillMode() {
     const filling = state.filling && Boolean(state.remoteStream || state.localStream);
     if (!filling) state.filling = false;
+    // Fill mode hides the chat. Floating it back over the picture is for the
+    // site opened as its own page; inside the Topping that draggable box sits on
+    // the thing being watched, so there the chat simply stays hidden.
+    const floating = filling && !EMBEDDED;
     $('app').classList.toggle('filling', filling);
-    $('chat-float').hidden = !filling;
+    $('chat-float').hidden = !floating;
     $('video-full').textContent = filling ? 'Exit' : 'Fill tab';
     // Start each fill anchored to the corner; a drag within a fill is kept.
     if (!filling) {
@@ -478,7 +490,7 @@
       panel.style.top = '';
       panel.style.right = '';
     }
-    mountChat(filling);
+    mountChat(floating);
     if (filling) $('video').play().catch(() => { /* autoplay may be blocked; the frame stays */ });
   }
 
@@ -631,14 +643,18 @@
   async function renderHome() {
     renderProfile();
     showView('home');
-    // The blocks are edited in Settings, so a student who has not picked any
-    // yet is taken there rather than left on a home view that cannot explain
-    // why their name never shows up for anyone.
-    if (!(state.profile?.studyBlocks || []).length) setSettingsOpen(true);
     // Watch for an invite even before we start one, so a classmate who asks us
     // can pull us into a session.
     startPolling();
     refreshDirectory();
+  }
+
+  // The blocks are edited in Settings, so a student who has not picked any yet
+  // is taken straight there instead of being left on a home view that cannot
+  // explain why their name never shows up for anyone. Called on arrival only:
+  // putting this inside renderHome would reopen Settings on leaving it.
+  function openSettingsIfUnset() {
+    if (!(state.profile?.studyBlocks || []).length) openSettings();
   }
 
   // -- Events ------------------------------------------------------------
@@ -662,6 +678,7 @@
       await signInWithToken(idToken);
       $('signin-password').value = '';
       await renderHome();
+      openSettingsIfUnset();
     } catch (error) {
       signinError.textContent = error.message;
       signinError.hidden = false;
@@ -699,15 +716,14 @@
     stopPolling();
     try { state.peer?.destroy(); } catch { /* ignore */ }
     state.peer = null;
-    setSettingsOpen(false);
     showView('signin');
     setStatus('offline', 'Signed out');
   }
 
   $('sign-out').onclick = () => signOut();
 
-  on('settings-toggle', () => setSettingsOpen(Boolean(settingsPanel?.hidden)));
-  on('settings-done', () => setSettingsOpen(false));
+  on('settings-toggle', () => (state.view === 'settings' ? leaveSettings() : openSettings()));
+  on('settings-done', () => leaveSettings());
   on('change-email', () => {
     signOut();
     $('signin-email').focus();
@@ -802,6 +818,8 @@
       try {
         state.profile = await api('/profile');
         await renderHome();
+        // Before refreshSession, so a room already in progress still wins.
+        openSettingsIfUnset();
         try { await refreshSession(); } catch { /* no active session is normal */ }
         return;
       } catch {

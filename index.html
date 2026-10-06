@@ -14,7 +14,7 @@
        leaves the Topping showing nothing but the status dot, so the page and
        the scripts it drives have to ship as a pair. Version any local script
        that is edited, not just the stylesheet. -->
-  <link rel="stylesheet" href="style.css?v=e9472d2f">
+  <link rel="stylesheet" href="style.css?v=8016a854">
 </head>
 <body>
   <main data-topping-content class="app" id="app">
@@ -86,6 +86,27 @@
       <button class="ghost" id="sign-out" type="button">Sign out</button>
     </section>
 
+    <!-- Settings, reached from the gear. A view like the others rather than a
+         dialog over a dimmed page: it sits on the same background, and being a
+         view means the Topping grows to its own height instead of needing a
+         scroll box. Leaving it goes back to whatever is true by then. -->
+    <section class="view" id="settings" hidden>
+      <div class="card">
+        <p class="field-label">Signed in as</p>
+        <strong class="student-email" id="settings-email">…</strong>
+        <p class="note">This is the account Study uses.</p>
+        <button class="secondary" id="change-email" type="button">Use a different email</button>
+      </div>
+
+      <div class="card">
+        <p class="field-label">Your study hall</p>
+        <div class="blocks" id="block-picker" role="group" aria-label="Blocks that are your study hall"></div>
+        <p class="note" id="blocks-note">Tick the blocks you have study hall. Your name shows to classmates during those blocks.</p>
+      </div>
+
+      <button class="ghost" id="settings-done" type="button">Done</button>
+    </section>
+
     <!-- Waiting: invite sent, or waiting for a classmate to accept ours. -->
     <section class="view" id="view-waiting" hidden>
       <div class="card">
@@ -133,31 +154,6 @@
       <button class="ghost danger" id="end" type="button">Leave session</button>
     </section>
 
-    <!-- Settings, opened by the gear. The account email and the study-hall
-         blocks live here so the home view stays a list of who is free. Sits
-         before #consent and #warning in the DOM so those two, which demand an
-         answer, paint over it on a first run. -->
-    <div class="overlay" id="settings" hidden>
-      <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <h2 class="card-title" id="settings-title">Settings</h2>
-
-        <p class="field-label">Signed in as</p>
-        <strong class="student-email" id="settings-email">…</strong>
-        <p class="note">This is the account Study uses.</p>
-        <button class="secondary" id="change-email" type="button">Use a different email</button>
-
-        <hr class="rule">
-
-        <p class="field-label">Your study hall</p>
-        <div class="blocks" id="block-picker" role="group" aria-label="Blocks that are your study hall"></div>
-        <p class="note" id="blocks-note">Tick the blocks you have study hall. Your name shows to classmates during those blocks.</p>
-
-        <div class="row end">
-          <button class="primary" id="settings-done" type="button">Done</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Consent before the first screen share. Not a browser dialog: the
          extension sandbox blocks window.confirm. -->
     <div class="overlay" id="consent" hidden>
@@ -198,7 +194,7 @@
 
   <script src="config.js?v=95957dff"></script>
   <script src="vendor/peerjs.min.js"></script>
-  <script src="app.js?v=ecee62ea" defer></script>
+  <script src="app.js?v=ddaae831" defer></script>
   <script src="resize.js?v=8856c242" defer></script>
 </body>
 </html>

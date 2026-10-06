@@ -6,9 +6,14 @@
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>Hilltoppers Study</title>
-  <!-- ?v= is the first 8 characters of style.css's sha256. GitHub Pages sends
-       max-age=600, so bump it whenever style.css changes: a new URL defeats the
-       browser cache and every deploy is seen without a hard refresh. -->
+  <!-- ?v= is the first 8 characters of that file's sha256. GitHub Pages sends
+       max-age=600, so bump it whenever the file changes: a new URL defeats the
+       browser cache and every deploy is seen without a hard refresh.
+       The local scripts carry it for a stronger reason than freshness. A stale
+       app.js against newer markup throws before the first view is shown, which
+       leaves the Topping showing nothing but the status dot, so the page and
+       the scripts it drives have to ship as a pair. Version any local script
+       that is edited, not just the stylesheet. -->
   <link rel="stylesheet" href="style.css?v=e9472d2f">
 </head>
 <body>
@@ -191,9 +196,9 @@
     </template>
   </main>
 
-  <script src="config.js"></script>
+  <script src="config.js?v=95957dff"></script>
   <script src="vendor/peerjs.min.js"></script>
-  <script src="app.js" defer></script>
-  <script src="resize.js" defer></script>
+  <script src="app.js?v=ecee62ea" defer></script>
+  <script src="resize.js?v=8856c242" defer></script>
 </body>
 </html>

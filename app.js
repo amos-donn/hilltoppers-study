@@ -48,9 +48,19 @@
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
+  // Binds a click only if the element is there. A copy of this file running
+  // against markup it does not match — a half-propagated deploy, or a browser
+  // holding a stale script — must not be able to blank the Topping, so nothing
+  // below the sign-in view is allowed to assume an element exists.
+  function on(id, handler) {
+    const element = $(id);
+    if (element) element.onclick = handler;
+  }
+
   // Settings is a panel over whatever view is showing, so it is opened and
   // closed rather than switched to.
   function setSettingsOpen(open) {
+    if (!settingsPanel || !settingsToggle) return;
     settingsPanel.hidden = !open;
     settingsToggle.setAttribute('aria-expanded', String(open));
   }
@@ -65,14 +75,22 @@
       setSettingsOpen(false);
     }
     // Nothing to configure before signing in.
-    settingsToggle.hidden = !state.profile;
-    for (const [key, element] of Object.entries(views)) element.hidden = key !== name;
+    if (settingsToggle) settingsToggle.hidden = !state.profile;
+    for (const [key, element] of Object.entries(views)) {
+      if (element) element.hidden = key !== name;
+    }
   }
 
   // The top bar is a dot and a gear now. The words that used to sit beside the
   // dot live in its label, so the state is still readable on hover and to a
   // screen reader without putting text in the toolbar.
+  //
+  // This touches nothing but the dot, and that is the whole point: an earlier
+  // version also wrote to a status *text* element, which threw the moment that
+  // element was removed — killing boot() before it could show a view and
+  // leaving a student staring at nothing but the dot.
   function setStatus(kind, text) {
+    if (!statusDot) return;
     statusDot.className = 'dot ' + kind;
     statusDot.title = text;
     statusDot.setAttribute('aria-label', text);
@@ -150,7 +168,7 @@
     if (!profile) return;
     $('my-name').textContent = profile.name;
     $('my-context').textContent = contextLine(profile);
-    $('settings-email').textContent = profile.email;
+    if ($('settings-email')) $('settings-email').textContent = profile.email;
     renderBlockPicker(profile.studyBlocks || []);
     renderStudents();
   }
@@ -688,12 +706,12 @@
 
   $('sign-out').onclick = () => signOut();
 
-  $('settings-toggle').onclick = () => setSettingsOpen(settingsPanel.hidden);
-  $('settings-done').onclick = () => setSettingsOpen(false);
-  $('change-email').onclick = () => {
+  on('settings-toggle', () => setSettingsOpen(Boolean(settingsPanel?.hidden)));
+  on('settings-done', () => setSettingsOpen(false));
+  on('change-email', () => {
     signOut();
     $('signin-email').focus();
-  };
+  });
 
   $('chat-form').onsubmit = (event) => {
     event.preventDefault();

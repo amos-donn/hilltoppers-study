@@ -57,29 +57,49 @@ html, body {
 .view { display: flex; flex-direction: column; gap: 9px; }
 .view[hidden] { display: none; }
 
-/* Top bar */
+/* Top bar: no mark, title or credit line. The Topping is already inside
+   Hilltoppers, so repeating the branding there is noise; the only chrome left
+   is the connection dot and the settings gear. */
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 10px;
 }
-.app-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--heading); }
-.statusbar { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #a0a7b0; flex: 0 0 auto; }
 .dot.online { background: var(--accent); }
 .dot.waiting { background: #f39c3d; }
 .dot.offline { background: var(--danger); }
 
-.logo { width: 28px; height: 28px; flex: 0 0 auto; display: block; }
-/* Logo and title stay together on the left, so space-between pushes only the
-   status to the right. */
-.brand-head { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* The gear is an icon at rest and grows the word "Settings" on hover or
+   keyboard focus, so the toolbar stays quiet but the control still says what
+   it is. */
+.gear {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.gear:not(:disabled):hover { background: var(--pill); color: var(--label); }
+/* .gear sets display, so the hidden attribute has to be repeated here. */
+.gear[hidden] { display: none; }
+.gear-icon { width: 18px; height: 18px; display: block; }
+.gear-label {
+  max-width: 0;
+  margin-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 0.15s ease, margin-right 0.15s ease, opacity 0.15s ease;
+}
+.gear:hover .gear-label,
+.gear:focus-visible .gear-label { max-width: 72px; margin-right: 6px; opacity: 1; }
 
-/* Credit under the title, with a hairline between. */
-.brand { margin-top: -2px; }
-.brand-rule { height: 0; margin: 0; border: 0; border-top: 1px solid var(--border-soft); }
-.brand-credit { margin: 5px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
+/* Hairline that separates two groups inside one card. */
+.rule { height: 0; margin: 2px 0; border: 0; border-top: 1px solid var(--border-soft); }
 
 /* Card */
 .card {
@@ -152,7 +172,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ghost.danger:not(:disabled):hover { background: rgba(188, 76, 44, 0.12); color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
-  button { transition: none; }
+  button, .gear-label { transition: none; }
 }
 
 /* Inputs */
@@ -236,7 +256,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
    viewport height and scrolls with the page, which also sidesteps the iframe
    fullscreen restriction. */
 .app.filling .topbar,
-.app.filling .brand,
 .app.filling #view-session > .controls,
 .app.filling #view-session > .messages,
 .app.filling #view-session > .composer,
@@ -332,6 +351,12 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   background: rgba(17, 17, 17, 0.55);
 }
 .overlay[hidden] { display: none; }
+/* Settings is the tallest overlay, and the iframe is only as tall as the view
+   behind it (a fixed overlay adds nothing to the height resize.js reports), so
+   it scrolls instead of letting the Done button fall past the bottom. Aligned
+   to the top on purpose: a centred grid item that overflows is clipped at the
+   top, where no scroll can reach it. */
+#settings { align-items: start; overflow-y: auto; }
 .dialog { width: 100%; max-width: 300px; box-shadow: 0 5px 16px rgba(17, 17, 17, 0.12); }
 .consent-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--label); }
 .consent-check input { margin: 2px 0 0; }
@@ -366,6 +391,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* The signed-in student's own name */
 .student-name { font-size: 15px; font-weight: 600; color: var(--heading); }
+/* The account email, shown in Settings. A long address wraps instead of
+   widening the dialog past the Topping. */
+.student-email { font-size: 13px; font-weight: 600; color: var(--heading); overflow-wrap: anywhere; }
 
 /* Study-hall block picker */
 .blocks { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -60,10 +60,14 @@ accent (`#1a7f37`), the same system font stack, and the same card, button and
 input shapes and border colours. A classmate who opens it should not be able to
 tell it was built separately.
 
-The mark (`logo.png`, from `favicon.png`) sits beside the title, and a hairline
-under the header carries the credit line `var / study - a hilltoppers/var
-project`. `favicon.png` is also the tab icon and `apple-touch-icon.png` the
-home-screen icon; the three are scaled from the same source square.
+The toolbar carries no branding: no mark, no title, no credit line. The Topping
+is already inside Hilltoppers, so repeating it there is noise. What is left is a
+status dot, whose wording sits in its label rather than on screen, and a
+[Phosphor](https://phosphoricons.com) `gear` (regular weight, inlined as SVG)
+that reveals the word `Settings` on hover and opens the settings panel. The
+account email and the study-hall blocks are edited there, not on the home view.
+`favicon.png` remains the tab icon and `apple-touch-icon.png` the home-screen
+icon; `logo.png` is no longer referenced by the page.
 
 ## Layout
 

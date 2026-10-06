@@ -25,12 +25,13 @@
     waiting: $('view-waiting'), session: $('view-session')
   };
   const statusDot = $('status-dot');
-  const statusText = $('status-text');
+  const settingsPanel = $('settings');
+  const settingsToggle = $('settings-toggle');
   const homeError = $('home-error');
   const signinError = $('signin-error');
 
   const state = {
-    token: null, profile: null, directory: null,
+    view: null, token: null, profile: null, directory: null,
     peer: null, conn: null, session: null,
     localStream: null, remoteStream: null, call: null, pollTimer: null,
     consentGiven: false, stoppingShare: false, filling: false
@@ -47,13 +48,34 @@
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
+  // Settings is a panel over whatever view is showing, so it is opened and
+  // closed rather than switched to.
+  function setSettingsOpen(open) {
+    settingsPanel.hidden = !open;
+    settingsToggle.setAttribute('aria-expanded', String(open));
+  }
+
   function showView(name) {
+    // Polling re-renders the same view every couple of seconds, so only a real
+    // change closes the panel. Closing on every call would slam it shut while a
+    // student was using it, and never closing it would hide an arriving invite
+    // behind it.
+    if (state.view !== name) {
+      state.view = name;
+      setSettingsOpen(false);
+    }
+    // Nothing to configure before signing in.
+    settingsToggle.hidden = !state.profile;
     for (const [key, element] of Object.entries(views)) element.hidden = key !== name;
   }
 
+  // The top bar is a dot and a gear now. The words that used to sit beside the
+  // dot live in its label, so the state is still readable on hover and to a
+  // screen reader without putting text in the toolbar.
   function setStatus(kind, text) {
     statusDot.className = 'dot ' + kind;
-    statusText.textContent = text;
+    statusDot.title = text;
+    statusDot.setAttribute('aria-label', text);
   }
 
   function showError(message) {
@@ -128,6 +150,7 @@
     if (!profile) return;
     $('my-name').textContent = profile.name;
     $('my-context').textContent = contextLine(profile);
+    $('settings-email').textContent = profile.email;
     renderBlockPicker(profile.studyBlocks || []);
     renderStudents();
   }
@@ -590,6 +613,10 @@
   async function renderHome() {
     renderProfile();
     showView('home');
+    // The blocks are edited in Settings, so a student who has not picked any
+    // yet is taken there rather than left on a home view that cannot explain
+    // why their name never shows up for anyone.
+    if (!(state.profile?.studyBlocks || []).length) setSettingsOpen(true);
     // Watch for an invite even before we start one, so a classmate who asks us
     // can pull us into a session.
     startPolling();
@@ -644,7 +671,9 @@
     await leave();
   };
 
-  $('sign-out').onclick = async () => {
+  // The account is the school email, so changing it means signing in with the
+  // other one: there is no separate address on the account to rewrite.
+  function signOut() {
     removeStore(STORE_KEY);
     state.token = null;
     state.profile = null;
@@ -652,8 +681,18 @@
     stopPolling();
     try { state.peer?.destroy(); } catch { /* ignore */ }
     state.peer = null;
+    setSettingsOpen(false);
     showView('signin');
     setStatus('offline', 'Signed out');
+  }
+
+  $('sign-out').onclick = () => signOut();
+
+  $('settings-toggle').onclick = () => setSettingsOpen(settingsPanel.hidden);
+  $('settings-done').onclick = () => setSettingsOpen(false);
+  $('change-email').onclick = () => {
+    signOut();
+    $('signin-email').focus();
   };
 
   $('chat-form').onsubmit = (event) => {
@@ -730,7 +769,7 @@
   // -- Boot --------------------------------------------------------------
   async function boot() {
     showError('');
-    setStatus('offline', 'Starting…');
+    setStatus('', 'Starting…');
     if (!readStore(WARNED_KEY)) $('warning').hidden = false;
     if (!API_BASE || !FIREBASE.apiKey) {
       showView('offline');

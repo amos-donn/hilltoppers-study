@@ -9,26 +9,25 @@
   <!-- ?v= is the first 8 characters of style.css's sha256. GitHub Pages sends
        max-age=600, so bump it whenever style.css changes: a new URL defeats the
        browser cache and every deploy is seen without a hard refresh. -->
-  <link rel="stylesheet" href="style.css?v=7109b0eb">
+  <link rel="stylesheet" href="style.css?v=e9472d2f">
 </head>
 <body>
   <main data-topping-content class="app" id="app">
 
+    <!-- No mark, title or credit line: the Topping already sits inside
+         Hilltoppers, so repeating the branding is noise. What is left is the
+         connection dot and the settings gear. -->
     <header class="topbar">
-      <span class="brand-head">
-        <img class="logo" src="logo.png" alt="" width="28" height="28">
-        <h1 class="app-title">Hilltoppers Study</h1>
-      </span>
-      <span class="statusbar">
-        <span class="dot" id="status-dot" aria-hidden="true"></span>
-        <span id="status-text" role="status">Starting…</span>
-      </span>
+      <span class="dot" id="status-dot" role="status" aria-label="Starting…"></span>
+      <button class="gear" id="settings-toggle" type="button" aria-expanded="false"
+              aria-controls="settings" hidden>
+        <span class="gear-label">Settings</span>
+        <!-- Phosphor "gear", regular weight (@phosphor-icons/core). -->
+        <svg class="gear-icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">
+          <path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z"/>
+        </svg>
+      </button>
     </header>
-
-    <div class="brand">
-      <hr class="brand-rule">
-      <p class="brand-credit">var / study - a hilltoppers/var project</p>
-    </div>
 
     <!-- Could not reach the Hilltoppers Study server. -->
     <section class="view" id="view-offline" hidden>
@@ -63,12 +62,6 @@
         <p class="field-label">Signed in as</p>
         <strong class="student-name" id="my-name">…</strong>
         <p class="note" id="my-context">Checking the schedule…</p>
-      </div>
-
-      <div class="card">
-        <p class="field-label">Your study hall</p>
-        <div class="blocks" id="block-picker" role="group" aria-label="Blocks that are your study hall"></div>
-        <p class="note" id="blocks-note">Tick the blocks you have study hall. Your name shows to classmates during those blocks.</p>
       </div>
 
       <div class="card">
@@ -135,6 +128,31 @@
       <button class="ghost danger" id="end" type="button">Leave session</button>
     </section>
 
+    <!-- Settings, opened by the gear. The account email and the study-hall
+         blocks live here so the home view stays a list of who is free. Sits
+         before #consent and #warning in the DOM so those two, which demand an
+         answer, paint over it on a first run. -->
+    <div class="overlay" id="settings" hidden>
+      <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h2 class="card-title" id="settings-title">Settings</h2>
+
+        <p class="field-label">Signed in as</p>
+        <strong class="student-email" id="settings-email">…</strong>
+        <p class="note">This is the account Study uses.</p>
+        <button class="secondary" id="change-email" type="button">Use a different email</button>
+
+        <hr class="rule">
+
+        <p class="field-label">Your study hall</p>
+        <div class="blocks" id="block-picker" role="group" aria-label="Blocks that are your study hall"></div>
+        <p class="note" id="blocks-note">Tick the blocks you have study hall. Your name shows to classmates during those blocks.</p>
+
+        <div class="row end">
+          <button class="primary" id="settings-done" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Consent before the first screen share. Not a browser dialog: the
          extension sandbox blocks window.confirm. -->
     <div class="overlay" id="consent" hidden>
@@ -156,7 +174,7 @@
     <div class="overlay" id="warning" hidden>
       <div class="card dialog" role="dialog" aria-modal="true" aria-labelledby="warning-title">
         <h2 class="card-title" id="warning-title">How Hilltoppers Study works</h2>
-        <p class="note">Sign in with your school email and the same password as the Hilltoppers extension. Tick the blocks you have study hall; your name then shows to classmates who want to study.</p>
+        <p class="note">Sign in with your school email and the same password as the Hilltoppers extension. Open Settings (the gear) to tick the blocks you have study hall; your name then shows to classmates who want to study.</p>
         <p class="note">Chat and screen sharing go straight between you and your classmate. The server only matches you up and never sees your messages or your screen.</p>
         <p class="note">Screen sharing needs permission in the Hilltoppers popup. If the Share button does nothing, ask to have it enabled.</p>
         <div class="row end">

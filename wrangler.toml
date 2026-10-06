@@ -40,10 +40,3 @@ database_id = "7cfc650d-c260-4857-b3cc-8f23b36223cb"
 # too, for a self-hosted coturn, and TURN_KEY_ID/TURN_API_TOKEN for Cloudflare
 # Calls TURN. See "Relay (TURN)" in the README. While none are set, /api/turn
 # reports configured:false and clients use the public PeerJS cloud.
-#
-# Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY the same way to turn on invite
-# notifications. Both are base64url, as every VAPID generator writes them: 65
-# bytes for the public point and 32 for the private scalar. While they are
-# unset, /api/push/key reports configured:false and invites stay poll-only.
-# VAPID_SUBJECT is optional and defaults to ALLOWED_ORIGINS above. See
-# "Notifications (Web Push)" in the README.
